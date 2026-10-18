@@ -1,5 +1,5 @@
-# Night Shift 3D Viewer
+# 9FOREST Viewer
 
-[Open the viewer](https://choiboryeon.github.io/nightshift-viewer/)
+[Open the 9FOREST viewer](https://choiboryeon.github.io/9forest_viewer/9forest_viewer.html)
 
-Interactive exhibition-space layout with 20 resonator objects, mounting options, lighting, and walking simulation.
+The current scene models the Night Shift exhibition space. The 20 resonator objects are maintained separately so they can be used in future venue models.
