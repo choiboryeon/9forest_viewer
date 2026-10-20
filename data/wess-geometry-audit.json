@@ -1,0 +1,35 @@
+{
+  "source_obj_sha256": "f30d0486d3c52177e6bf1670f89611734f14e375238b0b39fd657668d2fa3171",
+  "source_objects": 54,
+  "source_vertices": 2908,
+  "source_triangles": 5588,
+  "exported_architectural_triangles": 5588,
+  "architecture_meshes": 58,
+  "assumed_ceiling_meshes": 7,
+  "degenerate_triangles": 0,
+  "native_bounds_m": {
+    "min": [
+      -0.40005001,
+      -1.60548997,
+      -0.15000001
+    ],
+    "max": [
+      14.65898037,
+      5.32488012,
+      2.70000005
+    ]
+  },
+  "transform": "identity; metres, Z up; all original vertex values retained",
+  "exact_triangle_coordinate_and_winding_match": true,
+  "floor_area_m2": 62.47730202,
+  "gross_slab_area_m2": 77.44300829,
+  "floor_regions": 10,
+  "collision_obstacles": 99,
+  "entrance_clearance_m": 0.24,
+  "dimensions_m": {
+    "main_south_width": 7.919508333333334,
+    "main_depth": 4.564591666666665,
+    "column_width": 0.3503083333333335,
+    "column_depth": 0.5503333333333331
+  }
+}
