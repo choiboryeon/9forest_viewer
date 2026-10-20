@@ -1,0 +1,13 @@
+{
+  "source_sha256": "4bf62797660564f484826e4f7b9d9f641b346c6f53011c7bd15eca5f9a25cefe",
+  "source_objects": 167,
+  "source_triangles": 9949,
+  "exported_meshes": 167,
+  "exported_triangles": 9949,
+  "transform": "x=-OBJ.x, y=OBJ.y, z=OBJ.z; metre units; face winding reversed to maintain outward normals",
+  "exact_triangle_match": true,
+  "floor_regions": 16,
+  "obstacles": 8,
+  "ceiling_m": 2.64,
+  "beam_soffit_m": 2.28
+}

@@ -1,0 +1,160 @@
+{
+  "name": "공간 힘 지하",
+  "units": "m",
+  "coordinates": "plan u right/v down; Blender x=u,y=-v,z=up",
+  "source_files": [
+    "공간 힘 지하 도면.jpg",
+    "공간 힘 지하.pdf"
+  ],
+  "stated_dimensions_m": {
+    "main_width": 13.95,
+    "overall_depth": 10.75,
+    "bottom_straight": 12.45,
+    "right_straight": 4.15,
+    "ceiling": 2.64,
+    "stair_enclosure_depth": 2.55,
+    "front_segment": 0.86,
+    "notch_width": 0.78,
+    "notch_depth": 0.45
+  },
+  "outer_inner_face_polygon_uv": [
+    [
+      0,
+      10.75
+    ],
+    [
+      12.45,
+      10.75
+    ],
+    [
+      13.95,
+      9.11
+    ],
+    [
+      13.95,
+      4.96
+    ],
+    [
+      13.45,
+      4.96
+    ],
+    [
+      13.45,
+      4.71
+    ],
+    [
+      14.46,
+      4.71
+    ],
+    [
+      14.46,
+      2.52
+    ],
+    [
+      9.1,
+      2.52
+    ],
+    [
+      9.1,
+      2.31
+    ],
+    [
+      7.8,
+      2.31
+    ],
+    [
+      7.8,
+      0
+    ],
+    [
+      0,
+      0
+    ]
+  ],
+  "gallery_floor_polygon_uv": [
+    [
+      0,
+      0
+    ],
+    [
+      7.8,
+      0
+    ],
+    [
+      7.8,
+      2.31
+    ],
+    [
+      6,
+      2.31
+    ],
+    [
+      6,
+      4.86
+    ],
+    [
+      7.96,
+      4.86
+    ],
+    [
+      7.96,
+      5.16
+    ],
+    [
+      8.74,
+      5.16
+    ],
+    [
+      8.74,
+      4.71
+    ],
+    [
+      13.45,
+      4.71
+    ],
+    [
+      13.45,
+      4.96
+    ],
+    [
+      13.95,
+      4.96
+    ],
+    [
+      13.95,
+      9.11
+    ],
+    [
+      12.45,
+      10.75
+    ],
+    [
+      0,
+      10.75
+    ]
+  ],
+  "inferred": {
+    "storage_outer_x": 14.46,
+    "partition_v": 4.86,
+    "exterior_wall_thickness": 0.18,
+    "narrow_service_return_wall_thickness": 0.12,
+    "central_wall_thickness": 0.18,
+    "beam_soffit": 2.28,
+    "door_height": 2.1,
+    "long_panel_height": 2.3,
+    "outlet_height": 0.3,
+    "stair_step_rise": 0.18,
+    "stair_step_count": 9
+  },
+  "unresolved": [
+    "7800 vertical dimension conflicts with 10750 overall depth and image proportions; not applied.",
+    "2440 and 250 lack clear witness lines; not enforced.",
+    "Ceiling 2640 may refer to slab soffit or beam soffit; slab soffit assumed.",
+    "Long rectangles modeled as panels per JPG; type/height and current existence not photo-verified.",
+    "PDF p2 simplified SketchUp panel location differs from JPG; JPG used for plan location.",
+    "Stair flight direction/rise/upper connection are not documented; schematic partial flight only.",
+    "Storage boundaries, doors, beam positions and utilities are inferred, not surveyed."
+  ],
+  "excluded": "Exhibited artworks, movable tables, screens and other temporary installation contents.",
+  "gallery_gross_floor_m2": 114.676
+}

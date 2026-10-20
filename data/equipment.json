@@ -1,0 +1,5 @@
+[
+  {"id":"K8","title":"QSC K8 PA 스피커","dimensions_m":{"width":0.28,"depth":0.269,"height":0.45},"note":"한 조(2대). 스탠드 거치 높이를 조절할 수 있습니다."},
+  {"id":"MIXER","title":"오디오 믹서","dimensions_m":{"width":0.46,"depth":0.34,"height":0.12},"note":"기종 미지정. 배치 검토용 크기입니다."},
+  {"id":"PROJECTOR","title":"0.3:1 단초점 프로젝터","dimensions_m":{"width":0.42,"depth":0.32,"height":0.16},"note":"바닥 가까이 설치. 16:9 투사 영역은 모델의 벽면에 표시됩니다."}
+]
