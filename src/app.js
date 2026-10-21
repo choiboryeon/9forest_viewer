@@ -6,7 +6,7 @@ import {floorAt,fitPlacement,canPlace} from './spatial.js';
 import {gearModel} from './gear.js';
 import {projectionFor} from './projection.js';
 import {layoutItems} from './layout-migration.js';
-import {TrackLighting,validateLighting,railPoint,effectiveLumens} from './track-lighting.js';
+import {TrackLighting,validateLighting,railPoint,effectiveLumens,reflectedColor} from './track-lighting.js';
 import {lightingEditor} from './lighting-ui.js';
 import {ProjectorLighting,validateProjection} from './projector-lighting.js';
 import {projectorEditor} from './projector-ui.js';
@@ -71,6 +71,7 @@ function applySpaceLighting(){
  const simulation=isGear()&&trackRig.config.simulation;
  const bounce=simulation?effectiveLumens(trackRig.config)/meta.area_m2*.045:0;
  windowLight.visible=!isGear();galleryLight.visible=!isGear();ambient.visible=!simulation||bounce>0;ambient.intensity=simulation?bounce:isGear()?25:.9;fill.visible=!simulation;fill.intensity=isGear()?5:.42;
+ if(isGear()){ambient.color.copy(simulation?reflectedColor(trackRig.config):new THREE.Color(0xffffff));ambient.groundColor.copy(ambient.color).multiplyScalar(.62);}else{ambient.color.set(0xfff7eb);ambient.groundColor.set(0xb1b6b4);}
  scene.environmentIntensity=simulation?0:isGear()?5:.28;renderer.toneMappingExposure=isGear()?.04:1.04;
 }
 function setSettingsMode(mode){
@@ -79,7 +80,7 @@ function setSettingsMode(mode){
  $('#settings-title').textContent=lighting?'레일 조명 설정':'배치 설정';$('#settings-eyebrow').textContent=lighting?'TRACK LIGHTING':isGear()?'GEAR SETTINGS':'OBJECT SETTINGS';
  $('.right').setAttribute('aria-label',lighting?'레일 조명 설정':isGear()?'선택한 기자재 설정':'선택한 사물 설정');
  for(const b of $$('[data-settings-mode]'))b.setAttribute('aria-pressed',String(b.dataset.settingsMode===settingsMode));
- if(lighting)lightEditor.render();updateSelectionBox();
+ if(lighting){lightEditor.render();$('.right').scrollTop=0;}updateSelectionBox();
 }
 
 function clearGroup(group){group.traverse(o=>{o.geometry?.dispose();if(o.material){for(const m of [o.material].flat())m.dispose();}});group.clear();}

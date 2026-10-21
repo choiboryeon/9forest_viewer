@@ -13,22 +13,27 @@ export function defaultLighting(){
  const fixtures=[];let index=0;
  for(const rail of RAILS){
   const positions=rail.id.startsWith('main')?[1.6,5,7.6,11.4].map(x=>(x-1)/11.75):[.1,.87];
-  for(const t of positions)fixtures.push({id:`L${String(++index).padStart(2,'0')}`,rail:rail.id,t,enabled:true,dimmer:100,lumens:1200,kelvin:4000,beam:65,
+  for(const t of positions)fixtures.push({id:`L${String(++index).padStart(2,'0')}`,rail:rail.id,t,enabled:true,dimmer:100,lumens:1200,kelvin:6500,beam:65,feather:60,
    yaw:rail.id==='main-front'?180:rail.id==='main-back'?0:rail.id==='upper-left'?270:90,tilt:20});
  }
- return {version:1,master:100,simulation:true,showFixtures:true,showBeams:true,fixtures};
+ return {version:2,master:100,simulation:true,showFixtures:true,showBeams:true,fixtures};
 }
 export function validateLighting(data){
  if(data==null)return;
- if(typeof data!=='object'||data.version!==1||!Array.isArray(data.fixtures)||data.fixtures.length>MAX_LAMPS)throw Error('레일 조명 파일 형식을 확인해 주세요.');
+ if(typeof data!=='object'||![1,2].includes(data.version)||!Array.isArray(data.fixtures)||data.fixtures.length>MAX_LAMPS)throw Error('레일 조명 파일 형식을 확인해 주세요.');
  const numeric=(value,min,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=min&&value<=max;
  if(!numeric(data.master,0,100)||['simulation','showFixtures','showBeams'].some(k=>typeof data[k]!=='boolean'))throw Error('조명 전체 설정을 확인해 주세요.');
  const ids=new Set();
  for(const l of data.fixtures){
   if(!l||typeof l.id!=='string'||!/^[A-Za-z0-9_-]{1,32}$/.test(l.id)||ids.has(l.id)||!RAILS.some(r=>r.id===l.rail)||typeof l.enabled!=='boolean'||
-   !numeric(l.t,0,1)||!numeric(l.dimmer,0,100)||!numeric(l.lumens,100,3000)||!numeric(l.kelvin,2700,6500)||!numeric(l.beam,20,90)||!numeric(l.yaw,0,360)||!numeric(l.tilt,0,75))throw Error('개별 레일 조명 설정을 확인해 주세요.');
+   !numeric(l.t,0,1)||!numeric(l.dimmer,0,100)||!numeric(l.lumens,100,3000)||!numeric(l.kelvin,2700,6500)||!numeric(l.beam,20,90)||!numeric(l.yaw,0,360)||!numeric(l.tilt,0,90)||(data.version===2&&!numeric(l.feather,0,100)))throw Error('개별 레일 조명 설정을 확인해 주세요.');
   ids.add(l.id);
  }
+}
+export function upgradeLighting(raw){
+ validateLighting(raw);if(raw==null)return defaultLighting();const data=structuredClone(raw);
+ if(data.version===1){data.version=2;for(const l of data.fixtures){l.kelvin=6500;l.feather=60;}}
+ return data;
 }
 export function railPoint(id,t){const r=RAILS.find(r=>r.id===id);return r.a.map((v,i)=>v+(r.b[i]-v)*clamp(t,0,1));}
 export function railFraction(id,x,y){const r=RAILS.find(r=>r.id===id),dx=r.b[0]-r.a[0],dy=r.b[1]-r.a[1];return clamp(((x-r.a[0])*dx+(y-r.a[1])*dy)/(dx*dx+dy*dy),0,1);}
@@ -40,6 +45,11 @@ export function kelvinColor(kelvin){
  const r=t<=66?255:329.6987*(t-60)**-.1332048,g=t<=66?99.4708*Math.log(t)-161.1196:288.1222*(t-60)**-.0755148,b=t>=66?255:t<=19?0:138.5177*Math.log(t-10)-305.0448;
  return '#'+[r,g,b].map(n=>Math.round(clamp(n,0,255)).toString(16).padStart(2,'0')).join('');
 }
+export function reflectedColor(config){
+ const color=new THREE.Color(0,0,0);let total=0;
+ for(const l of config.fixtures){const weight=l.enabled?l.lumens*l.dimmer/100:0;color.add(new THREE.Color(kelvinColor(l.kelvin)).multiplyScalar(weight));total+=weight;}
+ return total?color.multiplyScalar(1/total):color.set(0xffffff);
+}
 
 export class TrackLighting{
  constructor(scene,onChange=()=>{}){
@@ -50,7 +60,7 @@ export class TrackLighting{
  get pickables(){return this.active&&this.config.showFixtures?[...this.nodes.values()].map(n=>n.model):[];}
  toJSON(){return structuredClone(this.config);}
  restore(raw){
-  validateLighting(raw);this.config=raw?structuredClone(raw):defaultLighting();this.selected=this.config.fixtures[0]?.id||null;this.rebuild();
+  this.config=upgradeLighting(raw);this.selected=this.config.fixtures[0]?.id||null;this.rebuild();
  }
  clear(){
   this.root.traverse(o=>{o.geometry?.dispose();if(o.material)for(const m of [o.material].flat())m.dispose();if(o.isSpotLight)o.dispose();});
@@ -71,7 +81,7 @@ export class TrackLighting{
    const lensMat=new THREE.MeshStandardMaterial({color:'#e3e4cf',emissive:'#fff1cf',emissiveIntensity:1,roughness:.4});
    const lens=new THREE.Mesh(new THREE.CircleGeometry(.044,24),lensMat);lens.rotation.x=-Math.PI/2;lens.position.y=.081;head.add(lens);
    const selection=add(new THREE.TorusGeometry(.069,.004,5,24),new THREE.MeshBasicMaterial({color:'#e6ad61',toneMapped:false}),[0,0,-.03]);
-   const light=new THREE.SpotLight('#fff0d4',1,0,Math.PI/6,.35,2);light.name=`Rail_${l.id}`;light.castShadow=true;
+   const light=new THREE.SpotLight('#fff0d4',1,0,Math.PI/6,.6,2);light.name=`Rail_${l.id}`;light.castShadow=true;
    light.shadow.mapSize.set(512,512);light.shadow.camera.near=.04;light.shadow.camera.far=20;light.shadow.camera.layers.enable(1);light.shadow.normalBias=.012;light.shadow.bias=-.00015;light.shadow.autoUpdate=false;
    this.root.add(light,light.target);
    const guide=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:'#e2bb78',transparent:true,opacity:.4,depthWrite:false,toneMapped:false}));guide.raycast=()=>{};this.root.add(guide);
@@ -83,10 +93,13 @@ export class TrackLighting{
   const n=this.nodes.get(l.id),point=new THREE.Vector3(...railPoint(l.rail,l.t)),dir=new THREE.Vector3(...lampDirection(l));
   n.model.position.copy(point);n.head.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir);
   const emitter=point.clone().add(new THREE.Vector3(0,0,-.145)).addScaledVector(dir,.087);
-  n.light.position.copy(emitter);n.light.target.position.copy(emitter).addScaledVector(dir,6);n.light.angle=l.beam*Math.PI/360;this.syncPower(l);n.light.shadow.needsUpdate=true;
+  n.light.position.copy(emitter);n.light.target.position.copy(emitter).addScaledVector(dir,6);n.light.angle=l.beam*Math.PI/360;n.light.penumbra=l.feather/100;this.syncPower(l);n.light.shadow.needsUpdate=true;
   const length=Math.min(9,emitter.z/Math.max(.2,-dir.z)),radius=length*Math.tan(n.light.angle),rotation=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,-1),dir),lines=[];
   const rim=i=>new THREE.Vector3(radius*Math.cos(i*Math.PI/16),radius*Math.sin(i*Math.PI/16),-length).applyQuaternion(rotation).add(emitter);
   for(let i=0;i<32;i++){lines.push(rim(i),rim(i+1));if(i%8===0)lines.push(emitter.clone(),rim(i));}
+  const innerRadius=length*Math.tan(n.light.angle*(1-n.light.penumbra));
+  const inner=i=>new THREE.Vector3(innerRadius*Math.cos(i*Math.PI/16),innerRadius*Math.sin(i*Math.PI/16),-length).applyQuaternion(rotation).add(emitter);
+  if(l.feather>0)for(let i=0;i<32;i+=2)lines.push(inner(i),inner(i+1));
   n.guide.geometry.dispose();n.guide.geometry=new THREE.BufferGeometry().setFromPoints(lines);
  }
  syncPower(l){const n=this.nodes.get(l.id);n.light.color.set(kelvinColor(l.kelvin));n.light.intensity=lampIntensity(l,this.config.master);n.lens.material.emissive.copy(n.light.color);n.lens.material.emissiveIntensity=n.light.intensity>0?10:0;}
@@ -102,7 +115,11 @@ export class TrackLighting{
  }
  edit(id,patch){
   const next=this.toJSON(),l=next.fixtures.find(l=>l.id===id);if(!l)return;Object.assign(l,patch);validateLighting(next);this.config=next;
-  if(['rail','t','beam','yaw','tilt'].some(k=>Object.hasOwn(patch,k)))this.syncLamp(l);else this.syncPower(l);this.syncVisibility();this.onChange();
+  if(['rail','t','beam','yaw','tilt','feather'].some(k=>Object.hasOwn(patch,k)))this.syncLamp(l);else this.syncPower(l);this.syncVisibility();this.onChange();
+ }
+ editAll(patch){
+  const next=this.toJSON();for(const l of next.fixtures)Object.assign(l,patch);validateLighting(next);this.config=next;
+  for(const l of this.config.fixtures)this.syncLamp(l);this.syncVisibility();this.onChange();
  }
  move(id,x,y){const l=this.config.fixtures.find(l=>l.id===id);if(l)this.edit(id,{t:railFraction(l.rail,x,y)});}
  add(rail){
@@ -117,5 +134,5 @@ export class TrackLighting{
   for(const l of this.config.fixtures){l.enabled=true;l.dimmer=100;this.syncPower(l);}this.syncVisibility();this.onChange();
  }
  invalidateShadows(){for(const n of this.nodes.values())n.light.shadow.needsUpdate=true;}
- describe(){return {...this.toJSON(),selected:this.selected,active:this.active,lamps:this.config.fixtures.map(l=>({id:l.id,position:this.nodes.get(l.id).light.position.toArray(),direction:lampDirection(l),intensity:this.nodes.get(l.id).light.intensity}))};}
+ describe(){return {...this.toJSON(),selected:this.selected,active:this.active,lamps:this.config.fixtures.map(l=>{const n=this.nodes.get(l.id);return {id:l.id,position:n.light.position.toArray(),direction:n.light.target.position.clone().sub(n.light.position).normalize().toArray(),beam:n.light.angle*360/Math.PI,feather:n.light.penumbra*100,intensity:n.light.intensity};})};}
 }
