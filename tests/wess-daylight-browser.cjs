@@ -1,0 +1,34 @@
+const assert=require('node:assert/strict');
+const path=require('node:path');
+const {chromium}=require('playwright');
+const frames=p=>p.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))));
+async function ready(p){await frames(p);await p.waitForFunction(()=>window.nineforestLayout?.daylight().pending===0&&window.nineforestLayout.state().renderTriangles>0);await frames(p);}
+async function pixel(p,world){await frames(p);return p.evaluate(world=>{const v=nineforestLayout.projectWorld(world),src=document.querySelector('#scene'),r=src.getBoundingClientRect(),c=document.createElement('canvas');c.width=src.width;c.height=src.height;const ctx=c.getContext('2d');ctx.drawImage(src,0,0);const d=ctx.getImageData(Math.round((v.x-r.left)*src.width/r.width)-2,Math.round((v.y-r.top)*src.height/r.height)-2,5,5).data;return Array.from(d).reduce((s,v,i)=>s+(i%4===3?0:v),0)/75;},world);}
+async function settings(p,patch){await p.evaluate(patch=>{const d=nineforestLayout.exportLayout();d.daylight={...d.daylight,...patch};nineforestLayout.importLayout(d);},patch);await ready(p);}
+(async()=>{
+ const browser=await chromium.launch({headless:true,...(process.env.CHROME_PATH?{executablePath:process.env.CHROME_PATH}:{channel:'chrome'})}),page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+ try{
+  await page.goto((process.env.VIEWER_URL||'http://127.0.0.1:4186/9forest_viewer.html')+'?space=wess');await page.waitForFunction(()=>window.nineforestLayout?.daylight);await ready(page);
+  const defaults=await page.evaluate(()=>nineforestLayout.exportLayout());assert.equal(defaults.daylight.artificial,0);assert.equal(await page.evaluate(()=>nineforestLayout.daylight().windows.length),9);
+  await page.locator('[data-view="top"]').click();const near=[2.2,.8,.02],far=[7.2,3.3,.02],closed=[13.3,2.2,.02];
+  await settings(page,{sun:0});const diffuseNear=await pixel(page,near),diffuseFar=await pixel(page,far),closedRoom=await pixel(page,closed);assert(diffuseNear>diffuseFar+25,`Daylight gradient ${diffuseNear} / ${diffuseFar}`);assert(closedRoom<20,`No skylight through an opaque roof: ${closedRoom}`);
+  const reflected=await pixel(page,[6.6,2.2,.02]);await settings(page,{bounce:false});const directOnly=await pixel(page,[6.6,2.2,.02]);assert(reflected>directOnly+2,`Window light reflects onto adjacent surfaces: ${reflected} / ${directOnly}`);
+  await settings(page,{sky:0,sun:100,bounce:false});const sunPatch=await pixel(page,near),shade=await pixel(page,far),sunClosed=await pixel(page,closed);assert(sunPatch>shade+70,`Sun is clipped to window apertures: ${sunPatch} / ${shade}`);assert(sunClosed<20,`Sun cannot pass through the ceiling: ${sunClosed}`);
+  const shadowPoint=[2.23,1,.02],unobstructed=await pixel(page,shadowPoint);
+  await page.evaluate(()=>{const d=nineforestLayout.exportLayout();d.items=[{type:'R04',mode:'floor',x:2.1,y:.42,height:0,rotation:0,tiltX:0,tiltY:0}];nineforestLayout.importLayout(d);});await ready(page);
+  const objectShadow=await pixel(page,shadowPoint);assert(objectShadow<unobstructed-40,`An added object refreshes cached sunlight shadows: ${objectShadow} / ${unobstructed}`);
+  await page.evaluate(()=>nineforestLayout.clear());await ready(page);assert(Math.abs(await pixel(page,shadowPoint)-unobstructed)<4,'Removing the object restores the lit floor');
+  await page.locator('#walls').uncheck();await page.locator('#roof').check();const cutaway=await pixel(page,far);assert(Math.abs(cutaway-shade)<4,'Visual cutaways preserve physical light occlusion');await page.locator('#walls').check();await page.locator('#roof').uncheck();
+  await settings(page,{sky:0,sun:0,artificial:0,bounce:true});const dark=await pixel(page,near);assert(dark<20,'No hidden global light in blackout');
+  await settings(page,{artificial:12});assert(await pixel(page,[6.6,2.2,.02])>dark+2,'Optional supplement illuminates the interior');
+  await page.locator('#lighting-open').click();await page.locator('[data-daylight-preset="daylight"]').click();await ready(page);await page.locator('[data-view="3d"]').click();await page.screenshot({path:path.resolve(__dirname,'../test-results/browser/wess-daylight-overview.png')});
+  await page.locator('[data-view="B"]').click();await page.screenshot({path:path.resolve(__dirname,'../test-results/browser/wess-daylight-interior.png')});
+  await page.locator('[data-daylight-preset="overcast"]').click();await ready(page);assert.equal(await page.evaluate(()=>nineforestLayout.exportLayout().daylight.sun),0);
+  await page.locator('#daylight-sky').evaluate(el=>{el.value='78';el.dispatchEvent(new Event('input',{bubbles:true}));});await ready(page);await page.reload();await page.waitForFunction(()=>window.nineforestLayout?.daylight);await ready(page);assert.equal(await page.evaluate(()=>nineforestLayout.exportLayout().daylight.sky),78);
+  const saved=await page.evaluate(()=>nineforestLayout.exportLayout());await page.locator('#space-select').selectOption('spacehim');assert.equal(await page.evaluate(()=>nineforestLayout.daylight().active),false);assert.equal(await page.locator('#lighting-open').textContent(),'레일 조명');await page.locator('#space-select').selectOption('wess');await ready(page);assert.equal(await page.evaluate(()=>nineforestLayout.exportLayout().daylight.sky),78);
+  const legacy={...saved};delete legacy.daylight;await page.evaluate(d=>nineforestLayout.importLayout(d),legacy);await ready(page);assert.equal(await page.evaluate(()=>nineforestLayout.exportLayout().daylight.sky),100);await page.evaluate(d=>nineforestLayout.importLayout(d),saved);await ready(page);assert.equal(await page.evaluate(()=>nineforestLayout.exportLayout().daylight.sky),78);
+  await page.setViewportSize({width:390,height:844});await page.locator('#lighting-open').click();await page.locator('#daylight-artificial').scrollIntoViewIfNeeded();assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:path.resolve(__dirname,'../test-results/browser/wess-daylight-mobile.png')});
+  assert.deepEqual(errors,[]);console.log(`PASS WESS daylight: window ${diffuseNear.toFixed(1)} / interior ${diffuseFar.toFixed(1)}, reflection ${reflected.toFixed(1)} / ${directOnly.toFixed(1)}, sun ${sunPatch.toFixed(1)} / shade ${shade.toFixed(1)}, roof occlusion, blackout, presets, persistence, JSON and mobile`);
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

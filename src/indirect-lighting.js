@@ -122,8 +122,8 @@ export class IndirectLighting{
   if(patches.length){const primary=patches[0],hit=this.firstHit(primary.position,primary.normal);if(hit){const reflected=[0,1,2].map(j=>patches.reduce((s,p)=>s+p.rgb[j],0));patches.push({position:add(hit.position,hit.normal,.045),normal:hit.normal,rgb:hit.albedo.map((v,j)=>v*reflected[j]*.28),radius:Math.max(.65,primary.radius*1.4),secondary:true});}}
   return patches;
  }
- bake(l){
-  const patches=this.patches(l),data=new Float32Array(this.cells*12);
+ bake(l,patches=this.patches(l)){
+  const data=new Float32Array(this.cells*12);
   for(let i=0;i<this.probes.length;i++)for(const patch of patches){
    const delta=add(this.probes[i],patch.position,-1),r2=dot(delta,delta);if(r2<.003||r2>(patch.secondary?100:49))continue;
    const distance=Math.sqrt(r2),direction=delta.map(v=>v/distance),cosine=dot(patch.normal,direction);if(cosine<=.005||this.blocked(patch.position,direction,distance-.03))continue;
