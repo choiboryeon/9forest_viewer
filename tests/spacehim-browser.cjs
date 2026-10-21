@@ -31,7 +31,7 @@ const {chromium}=require('playwright');
   s=await page.evaluate(()=>window.nineforestLayout.state());assert.equal(s.items[0].mode,'floor');
   let box=await page.evaluate(()=>window.nineforestLayout.selectedBounds());assert(Math.abs(box.min[2]-.012)<1e-6);assert(Math.abs(box.max[2]-.462)<1e-6);
   const exported=await page.evaluate(()=>window.nineforestLayout.exportLayout());
-  assert.equal(exported.version,5);
+  assert.equal(exported.version,6);
   await page.evaluate(()=>window.nineforestLayout.importLayout({version:4,space_id:'spacehim',items:[{type:'K8',mode:'stand',x:3.5,y:8.6,height:1.25,rotation:180}]}));
   s=await page.evaluate(()=>window.nineforestLayout.state());assert.equal(s.items[0].y,-8.6);assert.equal(s.items[0].rotation,0);
   await page.evaluate(()=>window.nineforestLayout.importLayout({version:5,space_id:'spacehim',items:[{type:'MIXER',mode:'floor',x:.5,y:-2,rotation:0}]}));
