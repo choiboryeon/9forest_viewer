@@ -53,7 +53,7 @@ async function brightness(p){await frames(p);return p.evaluate(()=>{const c=docu
   await page.mouse.move(point.x,point.y);await page.mouse.down();await page.mouse.move(point.x,point.y+35,{steps:6});await page.mouse.up();
   l=await lights(page);assert(Math.abs(l.fixtures.find(x=>x.id===l.selected).t-before)>.02,'Lamp drag moves along its rail');
   const lit=l.lamps.find(x=>x.id===l.selected).intensity;await page.locator('#lighting-fixtures').uncheck();assert.equal((await lights(page)).lamps.find(x=>x.id===l.selected).intensity,lit,'Fixture visibility does not switch off the light');
-  const saved=await page.evaluate(()=>window.nineforestLayout.exportLayout());assert.equal(saved.version,6);assert.equal(saved.lighting.master,47);
+  const saved=await page.evaluate(()=>window.nineforestLayout.exportLayout());assert.equal(saved.version,7);assert.equal(saved.lighting.master,47);
   await page.locator('#space-select').selectOption('wess');assert.equal((await lights(page)).active,false);
   await page.locator('#space-select').selectOption('spacehim');assert.deepEqual((await lights(page)).fixtures,saved.lighting.fixtures);
   await page.reload();await page.waitForFunction(()=>window.nineforestLayout?.state().renderTriangles>0);assert.equal((await lights(page)).master,47);

@@ -1,0 +1,1 @@
+`projector-black-white-blue.webm` is a synthetic VP8 clip for the projector browser test: 160 × 90 pixels, 12 fps, three seconds. It contains one second each of black, white and blue. It was generated locally from solid-colour frames; no external media is included.
