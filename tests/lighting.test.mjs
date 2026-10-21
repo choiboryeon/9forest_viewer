@@ -26,7 +26,7 @@ test('Legacy lights get cooler, softer edges while position, aim and power survi
  const old=defaultLighting();old.version=1;old.master=27;
  for(const l of old.fixtures){delete l.feather;l.kelvin=4000;l.yaw=133;l.tilt=47;l.t=.34;}
  old.fixtures[1].kelvin=2700;
- const next=upgradeLighting(old);validateLighting(next);assert.equal(next.version,2);assert.equal(next.master,27);
+ const next=upgradeLighting(old);validateLighting(next);assert.equal(next.version,3);assert.equal(next.master,27);
  for(const l of next.fixtures){assert.equal(l.kelvin,6500);assert.equal(l.feather,60);assert.equal(l.yaw,133);assert.equal(l.tilt,47);assert.equal(l.t,.34);}
  assert.equal(old.fixtures[0].kelvin,4000,'Migration does not mutate imported data');
  next.fixtures[0].kelvin=5000;next.fixtures[0].feather=23;assert.deepEqual(upgradeLighting(next),next,'New adjustments are preserved on future reloads');

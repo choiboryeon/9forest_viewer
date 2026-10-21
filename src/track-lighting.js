@@ -16,23 +16,25 @@ export function defaultLighting(){
   for(const t of positions)fixtures.push({id:`L${String(++index).padStart(2,'0')}`,rail:rail.id,t,enabled:true,dimmer:100,lumens:1200,kelvin:6500,beam:65,feather:60,
    yaw:rail.id==='main-front'?180:rail.id==='main-back'?0:rail.id==='upper-left'?270:90,tilt:20});
  }
- return {version:2,master:100,simulation:true,showFixtures:true,showBeams:true,fixtures};
+ return {version:3,master:100,simulation:true,showFixtures:true,showBeams:true,indirect:true,indirectStrength:100,fixtures};
 }
 export function validateLighting(data){
  if(data==null)return;
- if(typeof data!=='object'||![1,2].includes(data.version)||!Array.isArray(data.fixtures)||data.fixtures.length>MAX_LAMPS)throw Error('레일 조명 파일 형식을 확인해 주세요.');
+ if(typeof data!=='object'||![1,2,3].includes(data.version)||!Array.isArray(data.fixtures)||data.fixtures.length>MAX_LAMPS)throw Error('레일 조명 파일 형식을 확인해 주세요.');
  const numeric=(value,min,max)=>typeof value==='number'&&Number.isFinite(value)&&value>=min&&value<=max;
  if(!numeric(data.master,0,100)||['simulation','showFixtures','showBeams'].some(k=>typeof data[k]!=='boolean'))throw Error('조명 전체 설정을 확인해 주세요.');
+ if(data.version>=3&&(typeof data.indirect!=='boolean'||!numeric(data.indirectStrength,0,200)))throw Error('주변 반사광 설정을 확인해 주세요.');
  const ids=new Set();
  for(const l of data.fixtures){
   if(!l||typeof l.id!=='string'||!/^[A-Za-z0-9_-]{1,32}$/.test(l.id)||ids.has(l.id)||!RAILS.some(r=>r.id===l.rail)||typeof l.enabled!=='boolean'||
-   !numeric(l.t,0,1)||!numeric(l.dimmer,0,100)||!numeric(l.lumens,100,3000)||!numeric(l.kelvin,2700,6500)||!numeric(l.beam,20,90)||!numeric(l.yaw,0,360)||!numeric(l.tilt,0,90)||(data.version===2&&!numeric(l.feather,0,100)))throw Error('개별 레일 조명 설정을 확인해 주세요.');
+   !numeric(l.t,0,1)||!numeric(l.dimmer,0,100)||!numeric(l.lumens,100,3000)||!numeric(l.kelvin,2700,6500)||!numeric(l.beam,20,90)||!numeric(l.yaw,0,360)||!numeric(l.tilt,0,90)||(data.version>=2&&!numeric(l.feather,0,100)))throw Error('개별 레일 조명 설정을 확인해 주세요.');
   ids.add(l.id);
  }
 }
 export function upgradeLighting(raw){
  validateLighting(raw);if(raw==null)return defaultLighting();const data=structuredClone(raw);
  if(data.version===1){data.version=2;for(const l of data.fixtures){l.kelvin=6500;l.feather=60;}}
+ if(data.version===2){data.version=3;data.indirect=true;data.indirectStrength=100;}
  return data;
 }
 export function railPoint(id,t){const r=RAILS.find(r=>r.id===id);return r.a.map((v,i)=>v+(r.b[i]-v)*clamp(t,0,1));}

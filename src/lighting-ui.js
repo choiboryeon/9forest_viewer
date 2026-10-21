@@ -30,12 +30,17 @@ export function lightingEditor(element,rig){
    <div class="row-actions"><button id="lamp-add" ${c.fixtures.length>=MAX_LAMPS?'disabled':''}>조명 추가</button><button id="lighting-reset">배치 초기화</button></div>
    <div class="rule"></div><span class="control-label">전체 조명</span>
    ${slider('lighting-master','전체 밝기',c.master,0,100,1,'%')}
+   <label class="light-on"><input id="lighting-indirect" type="checkbox" ${c.indirect?'checked':''}>주변 반사광</label>
+   ${slider('lighting-indirect-strength','반사광 강도',c.indirectStrength,0,200,5,'%')}
+   <p class="micro">바닥·벽에 닿은 빛이 주변과 천장으로 반사됩니다. 조명의 위치·방향·밝기·색온도와 벽·기둥의 가림을 반영합니다.</p>
    <div class="light-switches"><label><input id="lighting-simulation" type="checkbox" ${c.simulation?'checked':''}>암실 조명 보기</label><label><input id="lighting-fixtures" type="checkbox" ${c.showFixtures?'checked':''}>레일·기구 표시</label><label><input id="lighting-beams" type="checkbox" ${c.showBeams?'checked':''}>선택 조명의 빛 범위 표시</label></div>
    <p class="micro">암실 조명 보기를 끄면 배치 작업용 밝기가 더해집니다.</p>
    <p class="mini-note">빛과 그림자를 실시간으로 확인하는 설치 검토용 미리보기입니다. 반사광은 간이 추정이며 실제 밝기는 조명 기구와 벽·바닥 마감에 따라 달라집니다. 조명 설정은 배치와 함께 저장됩니다.</p>
   </div>`;
   for(const b of element.querySelectorAll('[data-light-preset]'))b.addEventListener('click',()=>{rig.preset(b.dataset.lightPreset);render();});
   $('#lighting-master').addEventListener('input',e=>{const v=Number(e.target.value);rig.setGlobal({master:v});$('#lighting-master-value').textContent=v+'%';});
+  $('#lighting-indirect').addEventListener('change',e=>rig.setGlobal({indirect:e.target.checked}));
+  $('#lighting-indirect-strength').addEventListener('input',e=>{const value=Number(e.target.value);rig.setGlobal({indirectStrength:value});$('#lighting-indirect-strength-value').textContent=value+'%';});
   for(const [id,key] of [['lighting-simulation','simulation'],['lighting-fixtures','showFixtures'],['lighting-beams','showBeams']])$('#'+id).addEventListener('change',e=>rig.setGlobal({[key]:e.target.checked}));
   $('#lamp-select').addEventListener('change',e=>{rig.select(e.target.value);render();});
   $('#lamp-add').addEventListener('click',()=>{rig.add(l?.rail);render();});

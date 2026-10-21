@@ -6,7 +6,7 @@
     "build": "node tools/build.mjs",
     "serve": "node tools/serve.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:browser": "node tests/browser-qa.cjs && node tests/spacehim-browser.cjs && node tests/lighting-browser.cjs && node tests/projector-browser.cjs"
+    "test:browser": "node tests/browser-qa.cjs && node tests/spacehim-browser.cjs && node tests/lighting-browser.cjs && node tests/projector-browser.cjs && node tests/indirect-browser.cjs"
   },
   "dependencies": {
     "three": "0.180.0"

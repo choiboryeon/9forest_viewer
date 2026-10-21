@@ -6,10 +6,11 @@ import {floorAt,fitPlacement,canPlace} from './spatial.js';
 import {gearModel} from './gear.js';
 import {projectionFor} from './projection.js';
 import {layoutItems} from './layout-migration.js';
-import {TrackLighting,validateLighting,railPoint,effectiveLumens,reflectedColor} from './track-lighting.js';
+import {TrackLighting,validateLighting,railPoint} from './track-lighting.js';
 import {lightingEditor} from './lighting-ui.js';
 import {ProjectorLighting,validateProjection} from './projector-lighting.js';
 import {projectorEditor} from './projector-ui.js';
+import {IndirectLighting} from './indirect-lighting.js';
 
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const input=JSON.parse($('#layout-data').textContent), spaces=input.spaces;
@@ -66,13 +67,14 @@ grid.visible=false;
 const roomShadows=new THREE.Group();scene.add(roomShadows);
 const trackRig=new TrackLighting(scene,()=>{applySpaceLighting();persist();});
 const projectorRig=new ProjectorLighting(projectionGroup,()=>persist());
+const indirectRig=new IndirectLighting();
 const lightEditor=lightingEditor($('#lighting-panel'),trackRig);
 function applySpaceLighting(){
  const simulation=isGear()&&trackRig.config.simulation;
- const bounce=simulation?effectiveLumens(trackRig.config)/meta.area_m2*.045:0;
- windowLight.visible=!isGear();galleryLight.visible=!isGear();ambient.visible=!simulation||bounce>0;ambient.intensity=simulation?bounce:isGear()?25:.9;fill.visible=!simulation;fill.intensity=isGear()?5:.42;
- if(isGear()){ambient.color.copy(simulation?reflectedColor(trackRig.config):new THREE.Color(0xffffff));ambient.groundColor.copy(ambient.color).multiplyScalar(.62);}else{ambient.color.set(0xfff7eb);ambient.groundColor.set(0xb1b6b4);}
+ windowLight.visible=!isGear();galleryLight.visible=!isGear();ambient.visible=!simulation;ambient.intensity=simulation?0:isGear()?25:.9;fill.visible=!simulation;fill.intensity=isGear()?5:.42;
+ if(isGear()){ambient.color.set(0xffffff);ambient.groundColor.copy(ambient.color).multiplyScalar(.62);}else{ambient.color.set(0xfff7eb);ambient.groundColor.set(0xb1b6b4);}
  scene.environmentIntensity=simulation?0:isGear()?5:.28;renderer.toneMappingExposure=isGear()?.04:1.04;
+ indirectRig.setLighting(trackRig.config);
 }
 function setSettingsMode(mode){
  settingsMode=isGear()&&mode==='lighting'?'lighting':'gear';const lighting=settingsMode==='lighting';
@@ -107,7 +109,8 @@ function buildRoom(){
  galleryLight.position.set(...(him?[7,-7,2.45]:wess?[8.5,1.8,2.55]:[3.1,3.05,2.55]));galleryLight.target.position.set(...(him?[6.4,-8.7,.4]:wess?[8.5,1.8,0]:[3,2.15,.3]));galleryLight.intensity=him?8:wess?12:3.6;galleryLight.distance=him?14:wess?15:7;
  ambient.intensity=him?.7:.9;
  windowLight.shadow.camera.far=him?16:wess?16:9;galleryLight.shadow.camera.far=him?16:wess?16:7;windowLight.shadow.camera.updateProjectionMatrix();galleryLight.shadow.camera.updateProjectionMatrix();
- trackRig.setActive(him);projectorRig.setActive(him);applySpaceLighting();
+ if(him){indirectRig.setRoom([...roomShadows.children,...spaceMeshes.filter(m=>m.userData.isFloor)],meta);indirectRig.attach(roomGroup);}
+ trackRig.setActive(him);projectorRig.setActive(him);indirectRig.setActive(him);applySpaceLighting();
  $('#roof').disabled=!spaceMeshes.some(m=>m.userData.isCeiling);$('#structure').disabled=!spaceMeshes.some(m=>m.userData.isStructure);$('#equipment').disabled=!spaceMeshes.some(m=>m.userData.isEquipment);
 }
 
@@ -138,7 +141,7 @@ function updateRoom(){
  }
  let shadowsChanged=false;
  for(const m of roomShadows.children){const u=m.userData,show=(!u.unconfirmed||$('#unconfirmed').checked)&&(!u.isStructure||structure);if(m.visible!==show){m.visible=show;shadowsChanged=true;}}
- if(shadowsChanged){trackRig.invalidateShadows();projectorRig.invalidateShadows();}
+ if(shadowsChanged){trackRig.invalidateShadows();projectorRig.invalidateShadows();indirectRig.invalidateGeometry(true);}
 }
 function toggleUnconfirmed(){
  if(!isGear())return;
@@ -235,7 +238,7 @@ if(mode==='stand'){put(new THREE.CylinderGeometry(.0175,.0175,Math.max(.05,z-.18
 if(mode==='hang'){const top=z+s.height,anchor=roofZ(item.y)-floorAt(meta,item.x,item.y)-.07,span=w>.65?clamp(w*.25,.15,.38):0,lines=span?[-span,span]:[0];for(const x of lines){const h=Math.max(.03,anchor-top);put(new THREE.CylinderGeometry(.0035,.0035,h,8),dark,x,0,top+h/2);put(new THREE.SphereGeometry(.018,10,8),dark,x,0,anchor);}}
 return {group,bottom:z};}
 function updateProjections(){
- if(isGear())projectorRig.sync(items,meta,floorAt);
+ if(isGear()){projectorRig.sync(items,meta,floorAt);indirectRig.setDynamic(objectGroup);}
 }
 function drawItem(item){if(walkState)stopWalk();if(item.root){const oldFixture=item.root.children[0];oldFixture?.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});objectGroup.remove(item.root);}item.root=new THREE.Group();item.root.name=item.uid;item.root.userData.uid=item.uid;const {quaternion,size}=orientation(item),f=fixture(item,size),pivot=new THREE.Group(),model=modelFor(item.type);if(isGear())model.traverse(o=>{if(o.isMesh)o.castShadow=item.type!=='K8'||/K8_Moulded|K8_Dark_acoustic_cloth/.test(o.name);});model.position.z=-byId.get(item.type).dimensions_m.height/2;pivot.quaternion.copy(quaternion);pivot.position.z=f.bottom+size.height/2;pivot.add(model);item.model=pivot;item.root.add(f.group,pivot);item.root.position.set(item.x,item.y,floorAt(meta,item.x,item.y));objectGroup.add(item.root);if(selected===item.uid)updateSelectionBox();updateProjections();trackRig.invalidateShadows();}
 function updateSelectionBox(){if(walkState||(isGear()&&settingsMode==='lighting')){if(selectionBox)selectionBox.visible=false;return;}const it=items.find(x=>x.uid===selected);if(!it){if(selectionBox)selectionBox.visible=false;return;}it.root.updateMatrixWorld(true);if(!selectionBox){selectionBox=new THREE.BoxHelper(it.model,0xa45b37);selectionBox.material.transparent=true;selectionBox.material.opacity=.62;selectionBox.material.depthTest=false;selectionBox.renderOrder=50;scene.add(selectionBox);}else{selectionBox.visible=true;selectionBox.setFromObject(it.model);}}
@@ -396,5 +399,5 @@ $('#zoom-in').addEventListener('click',()=>{if(camera.isOrthographicCamera){came
 $('#zoom-out').addEventListener('click',()=>{if(camera.isOrthographicCamera){camera.zoom/=1.2;camera.updateProjectionMatrix();}else camera.position.sub(controls.target).multiplyScalar(1.2).add(controls.target);controls.update();});$('#reset-view').addEventListener('click',()=>setView('3d'));
 let initialSpace='nightshift';try{const q=new URL(location.href).searchParams.get('space'),saved=localStorage.getItem('9forest_active_space_v1');initialSpace=Object.hasOwn(spaces,q)?q:Object.hasOwn(spaces,saved)?saved:initialSpace;}catch{}
 setSpace(initialSpace,{initial:true});$('#status').hidden=true;
-let lastFrame=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,Math.max(0,(now-lastFrame)/1000));lastFrame=now;if(walkState)advanceWalk(dt,now);else controls.update();projectorRig.tick(now);renderer.render(scene,camera);}animate(lastFrame);
-window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>loadItems([]),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};
+let lastFrame=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,Math.max(0,(now-lastFrame)/1000));lastFrame=now;if(walkState)advanceWalk(dt,now);else controls.update();projectorRig.tick(now);indirectRig.tick();renderer.render(scene,camera);}animate(lastFrame);
+window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>loadItems([]),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};
