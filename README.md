@@ -12,6 +12,8 @@
 
 K8 본체는 [QSC 원본 K 시리즈 사양서](https://in.qscaudio.com/resource-files/productresources/spk/k/q_spk_k_specs.pdf)의 450 × 280 × 269 mm를 사용했습니다. 스탠드·믹서·프로젝터의 외형과 렌즈 오프셋은 실제 기종이 정해지지 않아 배치 검토용 근사치입니다. 투사 화면은 **투사비 0.3:1**로 계산한 기하학적 미리보기이며 실제 광학 성능, 차광, 음향, 전원 및 케이블 동선을 시뮬레이션하지 않습니다. 설치 전 현장 실측과 장비 사양 확인이 필요합니다.
 
+K8은 사다리꼴 캐비닛, 전면 타공 그릴, 매립 손잡이, 후면 패널을 포함한 모델로 교체했습니다. [Blender·OBJ·GLB 원본](assets/equipment/qsc-k8/)이 있으며 장비 설정의 **장비 확대**로 형상을 볼 수 있습니다. [공간 힘 구조 검토 보고서](docs/spacehim-model-review.md)에 도면·사진과의 대조 결과를 기록했습니다. 도면의 미확인 부재 두 개는 기본 숨김이며 **도면 미확인 부재** 옵션으로 표시할 수 있습니다.
+
 - 사물 추가, 드래그 이동, X/Y/Z 회전, 바닥·좌대·봉·천장 행잉을 지원합니다.
 - 공간마다 배치를 별도로 자동 저장합니다. 공간을 바꾸어도 이전 배치를 유지합니다.
 - JSON 저장 파일에는 `space_id`가 포함됩니다. 불러오면 해당 공간으로 자동 전환합니다. 공간 정보가 없는 기존 version 2/3 파일은 Night Shift 배치로 읽습니다.
@@ -37,6 +39,6 @@ npm run serve
 
 WESS 원본 수정 시 `node tools/convert-wess.mjs`를 실행한 뒤 다시 빌드하세요. 변환은 5,588개 원본 삼각형의 좌표와 면 방향을 보존하는지 검사합니다. `data/wess-source/README.md`와 `data/wess-geometry-audit.json`에 출처, 치수와 가정을 기록했습니다.
 
-공간 힘 원본은 `data/spacehim-source/`에 보관했습니다. `node tools/convert-spacehim.mjs`로 OBJ를 다시 변환할 수 있습니다. 원본 OBJ의 X 방향을 도면의 오른쪽 방향으로 되돌린 뒤 미터 단위의 167개 부재를 공간 모델로 저장합니다. 원본 삼각형이 모두 보존되는지 검사한 결과는 `data/spacehim-geometry-audit.json`에 남깁니다. 바닥 배치 영역은 실측이 아닌 원본 `model_notes.json`과 도면을 바탕으로 보수적으로 구획했습니다.
+공간 힘 원본은 `data/spacehim-source/`에 보관했습니다. `node tools/convert-spacehim.mjs`로 OBJ를 다시 변환할 수 있습니다. X·Y를 함께 회전해 원래 Blender 좌표 `(u,-v,Z)`로 복원한 167개 부재를 공간 모델로 저장합니다. 원본 삼각형이 모두 보존되는지 검사한 결과는 `data/spacehim-geometry-audit.json`에 남깁니다. `node tools/review-spacehim.mjs`는 검토 평면 SVG를 만듭니다. 바닥 배치 영역은 원본 `model_notes.json`과 도면을 바탕으로 보수적으로 구획했습니다. 이전 version 4 공간 힘 배치는 version 5의 좌표로 자동 이전됩니다.
 
 Chrome이 설치된 환경에서 로컬 서버를 켠 뒤 `npm run test:browser`로 드래그, 공간별 저장, JSON/PNG, 워킹 전환과 모바일을 검사할 수 있습니다. 다른 Chrome 실행 파일은 `CHROME_PATH`, 다른 서버 주소는 `VIEWER_URL` 환경 변수로 지정합니다. 스크린샷과 결과는 Git에서 제외된 `test-results/browser/`에 저장됩니다.

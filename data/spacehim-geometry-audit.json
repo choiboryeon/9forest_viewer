@@ -4,10 +4,13 @@
   "source_triangles": 9949,
   "exported_meshes": 167,
   "exported_triangles": 9949,
-  "transform": "x=-OBJ.x, y=OBJ.y, z=OBJ.z; metre units; face winding reversed to maintain outward normals",
+  "transform": "x=-OBJ.x, y=-OBJ.y, z=OBJ.z; 180-degree rotation; original winding retained; Blender coordinates restored",
   "exact_triangle_match": true,
+  "material_conversion": "MTL Kd linear RGB -> sRGB hex",
+  "coordinate_revision": 2,
+  "unconfirmed_panels_hidden_by_default": 2,
   "floor_regions": 16,
-  "obstacles": 8,
+  "obstacles": 6,
   "ceiling_m": 2.64,
   "beam_soffit_m": 2.28
 }

@@ -1,7 +1,7 @@
 // A geometric preview only: throw ratio = lens-to-wall distance / image width.
 export function projectionFor(item,walls,ratio=.3,aspect=16/9){
  const angle=(item.rotation||0)*Math.PI/180,dx=-Math.sin(angle),dy=Math.cos(angle);
- const lens=[item.x+dx*.175,item.y+dy*.175];let best=null;
+ const lens=[item.x+dx*.16,item.y+dy*.16];let best=null;
  for(const wall of walls||[]){
   const ax=wall.a[0],ay=wall.a[1],sx=wall.b[0]-ax,sy=wall.b[1]-ay;
   const det=dx*(-sy)+sx*dy;if(Math.abs(det)<1e-7)continue;

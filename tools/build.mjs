@@ -6,6 +6,8 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read=name=>JSON.parse(fs.readFileSync(path.join(root,'data',name),'utf8'));
 const spaces={nightshift:read('nightshift-room.json'),wess:read('wess-room.json'),spacehim:read('spacehim-room.json')};
 const objects=read('objects.json'),equipment=read('equipment.json');
+const k8=JSON.parse(fs.readFileSync(path.join(root,'assets/equipment/qsc-k8/qsc-k8.json'),'utf8'));
+Object.assign(equipment.find(o=>o.id==='K8'),{meshes:k8.meshes,source:k8.source});
 const {outputFiles}=await build({entryPoints:[path.join(root,'src/app.js')],bundle:true,minify:true,write:false,format:'iife',target:'es2020',legalComments:'inline'});
 const html=fs.readFileSync(path.join(root,'src/template.html'),'utf8')
  .replace('__LAYOUT_DATA__',()=>JSON.stringify({spaces,objects,equipment}).replace(/</g,'\\u003c'))
