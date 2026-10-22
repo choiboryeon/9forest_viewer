@@ -56,12 +56,20 @@ const ambient=new THREE.HemisphereLight(0xfff7eb,0xb1b6b4,.9);ambient.position.s
 // The D-wall window is frosted in the reference photos: it gives a broad, faint
 // wash of daylight rather than a hard sunbeam. Its light still casts soft object
 // and mounting shadows onto the floor and adjacent walls.
-const windowLight=new THREE.SpotLight(0xdceeff,7.5,9,Math.PI/3,.88,1.6);
-windowLight.position.set(-.2,1.45,2.05);windowLight.target.position.set(3.2,2.15,.35);
-windowLight.castShadow=true;windowLight.shadow.mapSize.set(2048,2048);windowLight.shadow.camera.near=.12;windowLight.shadow.camera.far=9;windowLight.shadow.normalBias=.012;windowLight.shadow.radius=4;windowLight.shadow.intensity=.46;scene.add(windowLight,windowLight.target);
-const galleryLight=new THREE.SpotLight(0xffedcf,3.6,7,Math.PI/2.9,.9,1.4);
-galleryLight.position.set(3.1,3.05,2.55);galleryLight.target.position.set(3,2.15,.3);
-galleryLight.castShadow=true;galleryLight.shadow.mapSize.set(1024,1024);galleryLight.shadow.camera.near=.1;galleryLight.shadow.camera.far=7;galleryLight.shadow.normalBias=.014;galleryLight.shadow.radius=4;galleryLight.shadow.intensity=.38;scene.add(galleryLight,galleryLight.target);
+const windowLight=new THREE.SpotLight(0xe6f0f7,5.5,6.5,Math.PI/2.7,.95,1.7);
+windowLight.position.set(-.14,1.45,2.02);windowLight.target.position.set(2.55,1.65,.65);
+windowLight.castShadow=true;windowLight.shadow.mapSize.set(1024,1024);windowLight.shadow.camera.near=.12;windowLight.shadow.camera.far=8;windowLight.shadow.normalBias=.012;windowLight.shadow.radius=6;windowLight.shadow.intensity=.24;scene.add(windowLight,windowLight.target);
+// The frosted D-wall glazing is a broad, cool source rather than a sun beam.
+const windowSideLights=[1.02,1.88].map(y=>{const light=new THREE.SpotLight(0xe9f1f6,2.2,5.8,Math.PI/2.55,.95,1.7);light.position.set(-.12,y,1.96);light.target.position.set(2.25,y,.7);scene.add(light,light.target);return light;});
+const galleryLight=new THREE.SpotLight(0xfff8ed,2.5,4.5,Math.PI/3,.9,1.8);
+galleryLight.position.set(3,4.05,2.46);galleryLight.target.position.set(3,4.4,1.2);
+galleryLight.castShadow=true;galleryLight.shadow.mapSize.set(512,512);galleryLight.shadow.camera.near=.1;galleryLight.shadow.camera.far=6;galleryLight.shadow.normalBias=.014;galleryLight.shadow.radius=5;galleryLight.shadow.intensity=.25;scene.add(galleryLight,galleryLight.target);
+// Match the suspended linear LEDs: two rows and the short returns near D/B.
+const nightLinearLights=[
+ [1.72,.65,1.72,1.35,7.5],[4.18,.65,4.18,1.35,7.5],
+ [1.72,3.1,1.72,2.4,7.5],[4.18,3.1,4.18,2.4,7.5],
+ [.65,1.85,1.25,1.85,4],[5.35,1.85,4.75,1.85,4]
+].map(([x,y,tx,ty,power],i)=>{const light=new THREE.SpotLight(0xf9fbff,power,5.3,Math.PI/2.75,.92,1.6);light.position.set(x,y,2.59);light.target.position.set(tx,ty,.45);light.castShadow=i===1||i===2;if(light.castShadow){light.shadow.mapSize.set(512,512);light.shadow.camera.near=.1;light.shadow.camera.far=6;light.shadow.normalBias=.012;light.shadow.radius=5;light.shadow.intensity=.3;}scene.add(light,light.target);return light;});
 const fill=new THREE.DirectionalLight(0xfff6e8,.42);fill.position.set(5,4,4);scene.add(fill);
 const grid=new THREE.Group();scene.add(grid);
 grid.visible=false;
@@ -74,11 +82,13 @@ const daylightUI=daylightEditor($('#daylight-panel'),daylightRig);
 const lightEditor=lightingEditor($('#lighting-panel'),trackRig);
 function applySpaceLighting(){
  const wess=spaceId==='wess',simulation=wess||(isGear()&&trackRig.config.simulation);
- windowLight.visible=!isGear()&&!wess;galleryLight.visible=!isGear()&&!wess;
- ambient.visible=!wess;ambient.intensity=isGear()?(simulation?12:25):.9;
- fill.visible=!wess;fill.intensity=isGear()?(simulation?2:5):.42;
+ const nightshift=!isGear()&&!wess;
+ windowLight.visible=nightshift;galleryLight.visible=nightshift;
+ for(const light of [...windowSideLights,...nightLinearLights])light.visible=nightshift;
+ ambient.visible=!wess;ambient.intensity=isGear()?(simulation?12:25):.55;
+ fill.visible=!wess;fill.intensity=isGear()?(simulation?2:5):.25;
  if(isGear()){ambient.color.set(0xffffff);ambient.groundColor.copy(ambient.color).multiplyScalar(.62);}else{ambient.color.set(0xfff7eb);ambient.groundColor.set(0xb1b6b4);}
- scene.environmentIntensity=wess?0:isGear()?(simulation?2:5):.28;renderer.toneMappingExposure=isGear()?.04:1.04;
+ scene.environmentIntensity=wess?0:isGear()?(simulation?2:5):.18;renderer.toneMappingExposure=isGear()?.04:wess?1.04:1.2;
  indirectRig.setLighting(trackRig.config);
 }
 function setSettingsMode(mode){
@@ -104,7 +114,8 @@ function buildRoom(){
   if(!m.vertices?.length||!m.faces?.length)continue;
   let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(m.vertices,3));g.setIndex(m.faces);const indexed=g;g=g.toNonIndexed();indexed.dispose();g.computeVertexNormals();
   const part=String(m.group||'').toLowerCase(),isFloor=part==='floor',isRoof=part==='roof',isEquipment=part==='equipment',isStructure=part==='structure',isCeiling=isRoof||m.ceilingElement||/Rafter|Eave timber|Timber ridge|Steel beam|light|spotlight|^Beam_|^Track_|^Spot_|^North_spot|^North_track/i.test(String(m.name||'')),isWindowGlass=/D obscure glass|Glass_/i.test(String(m.name||''));
-  const mat=new THREE.MeshStandardMaterial({color:isWindowGlass?'#e2edef':m.color||'#dfded7',metalness:isStructure?.2:.03,roughness:isFloor?.98:1,side:THREE.DoubleSide,transparent:(m.opacity??1)<1,opacity:m.opacity??1,depthWrite:(m.opacity??1)>=1,emissive:isWindowGlass?'#cfe7ee':'#000000',emissiveIntensity:isWindowGlass?(spaceId==='wess'?0:.55):0});
+  const nightLED=spaceId==='nightshift'&&/^Linear LED/.test(m.name);
+  const mat=new THREE.MeshStandardMaterial({color:isWindowGlass?(spaceId==='nightshift'?'#eef1ef':'#e2edef'):m.color||'#dfded7',metalness:isStructure?.2:.03,roughness:isFloor?.98:1,side:THREE.DoubleSide,transparent:(m.opacity??1)<1,opacity:m.opacity??1,depthWrite:(m.opacity??1)>=1,emissive:nightLED?'#f7fbff':isWindowGlass?(spaceId==='nightshift'?'#e9f0ee':'#cfe7ee'):'#000000',emissiveIntensity:nightLED?2.2:isWindowGlass?(spaceId==='wess'?0:.82):0});
   const mesh=new THREE.Mesh(g,mat);mesh.name=m.name;mesh.castShadow=false;mesh.receiveShadow=!isWindowGlass;
   const replacedLighting=isGear()&&/^Lighting_track|^North_track|^North_spot|^Track_stem|^Spot_head|^Spot_diffuser/.test(mesh.name);
   mesh.userData={category:part,isFloor,isRoof,isCeiling,isEquipment,isStructure,wall:roomWall(m),internalWall:!!m.internalWall,cutaway:m.cutaway,unconfirmed:m.unconfirmed,topHidden:m.topHidden,replacedLighting};roomGroup.add(mesh);spaceMeshes.push(mesh);
@@ -113,10 +124,10 @@ function buildRoom(){
   if((isGear()&&(part==='wall'||isStructure||isRoof))||(spaceId==='wess'&&!isWindowGlass&&!isFloor)){const shadowMaterial=spaceId==='wess'?mat.clone():mat;if(spaceId==='wess'){shadowMaterial.colorWrite=false;shadowMaterial.depthWrite=false;shadowMaterial.shadowSide=THREE.DoubleSide;}const shadow=new THREE.Mesh(g,shadowMaterial);shadow.layers.set(spaceId==='wess'?0:1);shadow.castShadow=true;shadow.userData={...mesh.userData,shadowOnly:spaceId==='wess'};roomShadows.add(shadow);}
  }
  const wess=spaceId==='wess',him=isGear();
- windowLight.position.set(...(him?[3,-1,2.45]:wess?[-.2,1.4,2.2]:[-.2,1.45,2.05]));windowLight.target.position.set(...(him?[6.3,-6,.3]:wess?[4.5,2,.2]:[3.2,2.15,.35]));windowLight.intensity=him?1.6:wess?15:7.5;windowLight.distance=him?12:wess?15:9;
- galleryLight.position.set(...(him?[7,-7,2.45]:wess?[8.5,1.8,2.55]:[3.1,3.05,2.55]));galleryLight.target.position.set(...(him?[6.4,-8.7,.4]:wess?[8.5,1.8,0]:[3,2.15,.3]));galleryLight.intensity=him?8:wess?12:3.6;galleryLight.distance=him?14:wess?15:7;
- ambient.intensity=him?.7:.9;
- windowLight.shadow.camera.far=him?16:wess?16:9;galleryLight.shadow.camera.far=him?16:wess?16:7;windowLight.shadow.camera.updateProjectionMatrix();galleryLight.shadow.camera.updateProjectionMatrix();
+ windowLight.position.set(...(him?[3,-1,2.45]:wess?[-.2,1.4,2.2]:[-.14,1.45,2.02]));windowLight.target.position.set(...(him?[6.3,-6,.3]:wess?[4.5,2,.2]:[2.55,1.65,.65]));windowLight.intensity=him?1.6:wess?15:5.5;windowLight.distance=him?12:wess?15:6.5;
+ galleryLight.position.set(...(him?[7,-7,2.45]:wess?[8.5,1.8,2.55]:[3,4.05,2.46]));galleryLight.target.position.set(...(him?[6.4,-8.7,.4]:wess?[8.5,1.8,0]:[3,4.4,1.2]));galleryLight.intensity=him?8:wess?12:2.5;galleryLight.distance=him?14:wess?15:4.5;
+ ambient.intensity=him?.7:.55;
+ windowLight.shadow.camera.far=him?16:wess?16:8;galleryLight.shadow.camera.far=him?16:wess?16:6;windowLight.shadow.camera.updateProjectionMatrix();galleryLight.shadow.camera.updateProjectionMatrix();
  if(him){indirectRig.setRoom([...roomShadows.children,...spaceMeshes.filter(m=>m.userData.isFloor)],meta);indirectRig.attach(roomGroup);}
  if(wess){daylightRig.setRoom([...roomShadows.children,...spaceMeshes.filter(m=>m.userData.isFloor)],meta,spaceMeshes.filter(m=>/^Window_Glass_/.test(m.name)));daylightRig.attach(roomGroup);}
  daylightRig.setActive(wess);trackRig.setActive(him);projectorRig.setActive(him);indirectRig.setActive(him);applySpaceLighting();
