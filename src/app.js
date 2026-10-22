@@ -83,7 +83,7 @@ function setSettingsMode(mode){
  const wess=spaceId==='wess';settingsMode=(isGear()||wess)&&mode==='lighting'?'lighting':'gear';const lighting=settingsMode==='lighting';
  $('#settings-tabs').hidden=!isGear()&&!wess;$('#lighting-open').hidden=!isGear()&&!wess;$('#lighting-open').textContent=wess?'자연광 · 조명':'레일 조명';$('#lighting-panel').hidden=!lighting||wess;$('#daylight-panel').hidden=!lighting||!wess;$('#inspector').hidden=lighting;
  $('[data-settings-mode="gear"]').textContent=isGear()?'기자재':'사물';$('[data-settings-mode="lighting"]').textContent=wess?'자연광 · 조명':'레일 조명';
- $('#settings-title').textContent=lighting?(wess?'자연광 · 조명 설정':'레일 조명 설정'):'배치 설정';$('#settings-eyebrow').textContent=lighting?(wess?'DAYLIGHT':'TRACK LIGHTING'):isGear()?'GEAR SETTINGS':'OBJECT SETTINGS';
+ $('#settings-title').textContent=lighting?(wess?'자연광 · 조명 설정':'레일 조명 설정'):'배치 설정';$('#settings-eyebrow').textContent=lighting?(wess?'LIGHTING':'TRACK LIGHTING'):isGear()?'GEAR SETTINGS':'OBJECT SETTINGS';
  $('.right').setAttribute('aria-label',lighting?(wess?'자연광과 조명 설정':'레일 조명 설정'):isGear()?'선택한 기자재 설정':'선택한 사물 설정');
  for(const b of $$('[data-settings-mode]'))b.setAttribute('aria-pressed',String(b.dataset.settingsMode===settingsMode));
  if(lighting){(wess?daylightUI:lightEditor).render();$('.right').scrollTop=0;}updateSelectionBox();

@@ -4,10 +4,20 @@ import {IndirectLighting} from './indirect-lighting.js';
 const add=(a,b,s=1)=>a.map((v,i)=>v+b[i]*s);
 const unit=a=>{const n=Math.hypot(...a);return a.map(v=>v/n);};
 export const WESS_SUN_DIRECTION=unit([.18,.72,-1]);
-export const defaultDaylight=()=>({version:1,sky:100,sun:35,artificial:0,bounce:true});
+// The 2026 rental guide shows the ceiling spots and inner-room linear lights on
+// in the same daytime photographs as the window light.
+export const defaultDaylight=()=>({version:2,sky:45,sun:18,artificial:60,bounce:true});
 export function validateDaylight(data){
  if(data==null)return;
- if(typeof data!=='object'||Array.isArray(data)||data.version!==1||typeof data.bounce!=='boolean'||['sky','sun','artificial'].some(k=>!Number.isFinite(data[k])||data[k]<0||data[k]>150))throw Error('WESS 자연광 설정을 확인해 주세요.');
+ if(typeof data!=='object'||Array.isArray(data)||![1,2].includes(data.version)||typeof data.bounce!=='boolean'||['sky','sun','artificial'].some(k=>!Number.isFinite(data[k])||data[k]<0||data[k]>150))throw Error('WESS 자연광 설정을 확인해 주세요.');
+}
+export function upgradeDaylight(data){
+ validateDaylight(data);
+ if(!data)return defaultDaylight();
+ // The old defaults were routinely saved to localStorage. Replace that exact
+ // preset while preserving any user-edited values and imported blackouts.
+ if(data.version===1&&data.sky===100&&data.sun===35&&data.artificial===0&&data.bounce===true)return defaultDaylight();
+ return {...data,version:2};
 }
 
 // Window emitters and their first surface reflections share the directional
@@ -57,11 +67,29 @@ export class WessDaylight{
  constructor(scene,onChange=()=>{}){
   this.config=defaultDaylight();this.onChange=onChange;this.active=false;this.volume=new WindowIrradiance();this.group=new THREE.Group();scene.add(this.group);this.glass=[];this.masks=[];
   this.sun=new THREE.DirectionalLight(0xfff2d9,0);this.sun.position.set(-4,-14,22);this.sun.target.position.set(0,2,0);this.group.add(this.sun,this.sun.target);
+  this.fill=new THREE.HemisphereLight(0xf4f8ff,0xd5d9dc,0);this.fill.position.set(0,0,5);this.group.add(this.fill);
   this.sun.castShadow=true;this.sun.shadow.autoUpdate=false;this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-11,right:11,top:9,bottom:-9,near:.1,far:50});this.sun.shadow.camera.layers.enable(1);this.sun.shadow.camera.updateProjectionMatrix();this.sun.shadow.bias=-.00008;this.sun.shadow.normalBias=.008;this.sun.shadow.radius=2;
-  this.lamps=[];
-  // A small optional supplement only; the default is daylight with lamps off.
-  for(const p of [[3.4,2.5,2.55],[6.7,2.8,2.55],[9.7,3.1,2.55]]){
-   const light=new THREE.SpotLight(0xf3f6ff,0,6,Math.PI/3,.85,2);light.position.set(...p);light.target.position.set(p[0],p[1],0);light.castShadow=true;light.shadow.autoUpdate=false;light.shadow.mapSize.set(512,512);light.shadow.camera.layers.enable(1);light.shadow.normalBias=.015;this.group.add(light,light.target);this.lamps.push(light);
+  this.lamps=[];this.lenses=[];
+  const railMaterial=new THREE.MeshBasicMaterial({color:0xdbdddc});
+  const housingMaterial=new THREE.MeshBasicMaterial({color:0xe9ebea});
+  const addRail=(x0,y0,x1,y1)=>{const length=Math.hypot(x1-x0,y1-y0),rail=new THREE.Mesh(new THREE.BoxGeometry(length,.025,.028),railMaterial);rail.position.set((x0+x1)/2,(y0+y1)/2,2.625);rail.rotation.z=Math.atan2(y1-y0,x1-x0);this.group.add(rail);};
+  // Approximate the visible installation in the guide: two main-room rails,
+  // a shorter inner-room rail, and cool-white adjustable spot heads.
+  addRail(.95,.9,7.55,.9);addRail(.95,3.65,7.55,3.65);addRail(8.4,2.95,11.5,2.95);
+  const positions=[...[1.35,2.95,4.55,6.35].flatMap(x=>[[x,.9],[x,3.65]]),[8.65,2.95],[9.9,2.95],[11.2,2.95]];
+  for(const [i,[x,y]] of positions.entries()){
+   const stem=new THREE.Mesh(new THREE.CylinderGeometry(.009,.009,.065,8),housingMaterial);stem.position.set(x,y,2.58);this.group.add(stem);
+   const head=new THREE.Mesh(new THREE.CylinderGeometry(.037,.051,.105,12),housingMaterial);head.rotation.x=Math.PI/2;head.position.set(x,y,2.525);this.group.add(head);
+   const lensMaterial=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xe9f2ff,emissiveIntensity:0,roughness:.7});
+   const lens=new THREE.Mesh(new THREE.CircleGeometry(.042,12),lensMaterial);lens.position.set(x,y,2.465);lens.rotation.y=Math.PI;this.group.add(lens);this.lenses.push(lens);
+   const light=new THREE.SpotLight(0xf1f7ff,0,5.8,Math.PI/4,.75,2);light.position.set(x,y,2.46);light.target.position.set(x+(y<2?-.2:.15),y+(y<2?.18:-.18),.35);light.castShadow=[0,2,5,7,9].includes(i);light.shadow.autoUpdate=false;light.shadow.mapSize.set(384,384);light.shadow.camera.layers.enable(1);light.shadow.normalBias=.014;light.shadow.radius=3;this.group.add(light,light.target);this.lamps.push(light);
+  }
+  // The inner room has continuous-looking, cool-white edge illumination in
+  // addition to its spots. Keep the slim diffusers visible at zero output.
+  this.strips=[];
+  for(const [x0,y0,x1,y1] of [[8.45,1.83,11.58,1.83],[8.45,4.27,11.58,4.27],[8.45,1.83,8.45,4.27]]){
+   const length=Math.hypot(x1-x0,y1-y0),body=new THREE.Mesh(new THREE.BoxGeometry(length,.018,.018),housingMaterial);body.position.set((x0+x1)/2,(y0+y1)/2,2.61);body.rotation.z=Math.atan2(y1-y0,x1-x0);this.group.add(body);
+   const material=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xe9f2ff,emissiveIntensity:0});const diffuser=new THREE.Mesh(new THREE.BoxGeometry(length,.012,.008),material);diffuser.position.copy(body.position);diffuser.position.z-=.012;diffuser.rotation.z=body.rotation.z;this.group.add(diffuser);this.strips.push(diffuser);
   }
   this.setActive(false);
  }
@@ -88,17 +116,24 @@ export class WessDaylight{
  invalidateShadows(){for(const l of [this.sun,...this.lamps])l.shadow.needsUpdate=true;}
  invalidateGeometry(){this.volume.invalidateGeometry(true);this.invalidateShadows();}
  setActive(active){this.active=active;this.group.visible=active;this.volume.setActive(active);if(active)this.invalidateShadows();this.apply();}
- restore(data){validateDaylight(data);this.config=data?structuredClone(data):defaultDaylight();this.apply();}
+ restore(data){this.config=upgradeDaylight(data);this.apply();}
  edit(patch){const next={...this.config,...patch};validateDaylight(next);this.config=next;this.apply();this.onChange();}
  apply(){
-  this.sun.intensity=this.config.sun/100*12;this.sun.visible=this.active&&this.config.sun>0;
+  this.sun.intensity=this.config.sun/100*10;this.sun.visible=this.active&&this.config.sun>0;
+  // The guide's white ceiling and walls spread the many installed fixtures
+  // beyond their individual pools. Keep this fill tied to the indoor dimmer.
+  this.fill.intensity=this.config.artificial/100*.9;
   // Match the direction used for the daylight reference, not a surveyed sun path.
   this.sun.target.position.set(4,2,0);this.sun.position.fromArray(add([4,2,0],WESS_SUN_DIRECTION,-22));
-  for(const light of this.lamps){light.intensity=this.config.artificial/100*8;light.visible=this.active&&this.config.artificial>0;}
+  for(const light of this.lamps){light.intensity=this.config.artificial/100*12;light.visible=this.active&&this.config.artificial>0;}
+  for(const lens of this.lenses)lens.material.emissiveIntensity=this.config.artificial/100*3;
+  for(const strip of this.strips)strip.material.emissiveIntensity=this.config.artificial/100*2;
   for(const mesh of this.glass){mesh.material.emissiveIntensity=this.config.sky/100*.18;}
   this.volume.bounce=this.config.bounce;
   const fixtures=(this.windows||[]).flatMap(w=>[{id:w.id,window:w,enabled:true,dimmer:this.config.sky,lumens:45,kelvin:6500},{id:w.id+'-sun',window:w,sun:true,enabled:this.config.bounce,dimmer:this.config.sun,lumens:90,kelvin:5500}]);
-  this.lamps.forEach((l,i)=>fixtures.push({id:'supplement-'+i,supplement:l.position.toArray(),enabled:this.config.bounce,dimmer:this.config.artificial,lumens:25,kelvin:6000}));
+  // A few representative lamps are enough for the spatial bounce field; all
+  // eleven visible spots still contribute direct light.
+  [this.lamps[1],this.lamps[6],this.lamps[9]].forEach((l,i)=>fixtures.push({id:'supplement-'+i,supplement:l.position.toArray(),enabled:this.config.bounce,dimmer:this.config.artificial,lumens:55,kelvin:6500}));
   this.volume.setLighting({indirect:true,indirectStrength:100,master:100,fixtures});
  }
  tick(){if(this.dynamicAt){if(performance.now()<this.dynamicAt)return;this.dynamicAt=0;this.volume.invalidateGeometry(false);}this.volume.tick();}
@@ -107,10 +142,10 @@ export class WessDaylight{
 }
 
 export function daylightEditor(element,rig){
- const presets={daylight:defaultDaylight(),overcast:{...defaultDaylight(),sky:65,sun:0},supplement:{...defaultDaylight(),artificial:12}};
+ const presets={reference:defaultDaylight(),daylight:{...defaultDaylight(),sky:75,sun:30,artificial:0},overcast:{...defaultDaylight(),sky:35,sun:0,artificial:60}};
  function render(){
   const c=rig.config;
-  element.className='lighting-editor';element.innerHTML=`<p class="mini-note">두 창면에서 들어오는 자연광과 벽·바닥의 반사광을 조절합니다. 기본 인공조명은 꺼져 있습니다.</p><div class="light-presets"><button data-daylight-preset="daylight">자연광</button><button data-daylight-preset="overcast">흐린 날</button><button data-daylight-preset="supplement">보조광 최소</button></div>${[['sky','창으로 들어오는 확산광'],['sun','창가 햇빛'],['artificial','실내 보조조명']].map(([key,label])=>`<div class="light-slider"><label for="daylight-${key}">${label}<output id="daylight-${key}-value">${c[key]}%</output></label><input id="daylight-${key}" type="range" min="0" max="150" step="1" value="${c[key]}"></div>`).join('')}<div class="light-switches"><label><input type="checkbox" id="daylight-bounce" ${c.bounce?'checked':''}>주변 반사광</label></div><p class="mini-note">사진 기준 주간 채광의 근사입니다. 햇빛 방향은 참고값이며 실제 시각·방위에 따른 일조 계산은 아닙니다.</p>`;
+  element.className='lighting-editor';element.innerHTML=`<p class="mini-note">WESS+ 안내 사진처럼 창빛과 6,500 K 천장 스폿·안쪽 전시장의 라인 조명을 함께 표시합니다.</p><div class="light-presets"><button data-daylight-preset="reference">안내 사진</button><button data-daylight-preset="daylight">자연광만</button><button data-daylight-preset="overcast">흐린 날</button></div>${[['sky','창으로 들어오는 확산광'],['sun','창가 햇빛'],['artificial','실내 조명']].map(([key,label])=>`<div class="light-slider"><label for="daylight-${key}">${label}<output id="daylight-${key}-value">${c[key]}%</output></label><input id="daylight-${key}" type="range" min="0" max="150" step="1" value="${c[key]}"></div>`).join('')}<div class="light-switches"><label><input type="checkbox" id="daylight-bounce" ${c.bounce?'checked':''}>주변 반사광</label></div><p class="mini-note">조명 위치·광량과 햇빛 방향은 안내 사진을 바탕으로 한 근사값입니다.</p>`;
   for(const key of ['sky','sun','artificial'])element.querySelector('#daylight-'+key).addEventListener('input',e=>{rig.edit({[key]:Number(e.target.value)});element.querySelector('#daylight-'+key+'-value').textContent=e.target.value+'%';});
   element.querySelector('#daylight-bounce').addEventListener('change',e=>rig.edit({bounce:e.target.checked}));
   for(const b of element.querySelectorAll('[data-daylight-preset]'))b.addEventListener('click',()=>{rig.edit(presets[b.dataset.daylightPreset]);render();});
