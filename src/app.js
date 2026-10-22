@@ -12,13 +12,18 @@ import {ProjectorLighting,validateProjection} from './projector-lighting.js';
 import {projectorEditor} from './projector-ui.js';
 import {IndirectLighting} from './indirect-lighting.js';
 import {WessDaylight,daylightEditor,validateDaylight} from './wess-daylight.js';
+import {SunkenLighting} from './sunken-lighting.js';
+import {planDuct,buildDuct,normalizeDuctParams,isSharedDuctResource,MODE_KO as DUCT_MODE} from './duct.js';
+import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
 
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const input=JSON.parse($('#layout-data').textContent), spaces=input.spaces;
 let library=input.objects,byId=new Map(library.map(o=>[o.id,o]));
 let spaceId='nightshift',room=spaces.nightshift,meta=room.metadata,W,D,H,eave,ridgeY,bounds,cx,cy;
 const isGear=()=>spaceId==='spacehim';
-const spaceName=()=>spaceId==='wess'?'WESS+':isGear()?'공간 힘':'Night Shift';
+const isSunken=()=>spaceId==='sunken';
+const hasDucts=()=>isSunken();
+const spaceName=()=>spaceId==='wess'?'WESS+':isGear()?'공간 힘':isSunken()?'Sunken':'Night Shift';
 function setRoomData(id){
  spaceId=id;room=spaces[id];meta=room.metadata;W=meta.width_m;D=meta.depth_m;H=meta.ridge_m;eave=meta.eave_m;ridgeY=meta.ridge_y_m;
  bounds=meta.bounds||{min:[0,0],max:[W,D]};cx=(bounds.min[0]+bounds.max[0])/2;cy=(bounds.min[1]+bounds.max[1])/2;
@@ -38,7 +43,7 @@ const RECS={
  R16:['plinth','링 하부를 낮게 받치기'],R17:['plinth','코일을 수평면에 놓기'],R18:['rod','얕은 트레이를 높여 보기'],R19:['floor','바퀴와 포크를 바닥에 놓기'],R20:['plinth','분기관을 낮게 받치기']};
 const storageKey=()=>`9forest_layout_${spaceId}_v1`,LEGACY_STORAGE='nightshift_layout_v2';
 const memoryLayouts=new Map();
-let sequence=0,view='3d',selected=null,items=[],drag=null,selectionBox=null,walkState=null,settingsMode='gear';
+let sequence=0,view='3d',selected=null,items=[],ducts=[],drag=null,selectionBox=null,walkState=null,settingsMode='gear';
 const meshes=new Map(),spaceMeshes=[];
 let toastTimer;
 function toast(message){const el=$('#toast');el.textContent=message;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,3000);}
@@ -78,17 +83,19 @@ const trackRig=new TrackLighting(scene,()=>{applySpaceLighting();persist();});
 const projectorRig=new ProjectorLighting(projectionGroup,()=>persist());
 const indirectRig=new IndirectLighting();
 const daylightRig=new WessDaylight(scene,()=>persist());
+const sunkenRig=new SunkenLighting(scene);
 const daylightUI=daylightEditor($('#daylight-panel'),daylightRig);
 const lightEditor=lightingEditor($('#lighting-panel'),trackRig);
 function applySpaceLighting(){
  const wess=spaceId==='wess',simulation=wess||(isGear()&&trackRig.config.simulation);
- const nightshift=!isGear()&&!wess;
+ const nightshift=spaceId==='nightshift',sunken=isSunken();
  windowLight.visible=nightshift;galleryLight.visible=nightshift;
  for(const light of [...windowSideLights,...nightLinearLights])light.visible=nightshift;
  ambient.visible=!wess;ambient.intensity=isGear()?(simulation?12:25):.55;
  fill.visible=!wess;fill.intensity=isGear()?(simulation?2:5):.25;
  if(isGear()){ambient.color.set(0xffffff);ambient.groundColor.copy(ambient.color).multiplyScalar(.62);}else{ambient.color.set(0xfff7eb);ambient.groundColor.set(0xb1b6b4);}
  scene.environmentIntensity=wess?0:isGear()?(simulation?2:5):.18;renderer.toneMappingExposure=isGear()?.04:wess?1.04:1.2;
+ sunkenRig.setActive(sunken);if(sunken){ambient.intensity=.4;fill.intensity=.18;scene.environmentIntensity=.3;renderer.toneMappingExposure=1.08;}
  indirectRig.setLighting(trackRig.config);
 }
 function setSettingsMode(mode){
@@ -113,9 +120,9 @@ function buildRoom(){
  for(const m of room.meshes){
   if(!m.vertices?.length||!m.faces?.length)continue;
   let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(m.vertices,3));g.setIndex(m.faces);const indexed=g;g=g.toNonIndexed();indexed.dispose();g.computeVertexNormals();
-  const part=String(m.group||'').toLowerCase(),isFloor=part==='floor',isRoof=part==='roof',isEquipment=part==='equipment',isStructure=part==='structure',isCeiling=isRoof||m.ceilingElement||/Rafter|Eave timber|Timber ridge|Steel beam|light|spotlight|^Beam_|^Track_|^Spot_|^North_spot|^North_track/i.test(String(m.name||'')),isWindowGlass=/D obscure glass|Glass_/i.test(String(m.name||''));
+  const part=String(m.group||'').toLowerCase(),isFloor=part==='floor',isRoof=part==='roof',isEquipment=part==='equipment',isStructure=part==='structure',isCeiling=isRoof||m.ceilingElement||!isSunken()&&/Rafter|Eave timber|Timber ridge|Steel beam|light|spotlight|^Beam_|^Track_|^Spot_|^North_spot|^North_track/i.test(String(m.name||'')),isWindowGlass=/D obscure glass|Glass_/i.test(String(m.name||''));
   const nightLED=spaceId==='nightshift'&&/^Linear LED/.test(m.name);
-  const mat=new THREE.MeshStandardMaterial({color:isWindowGlass?(spaceId==='nightshift'?'#eef1ef':'#e2edef'):m.color||'#dfded7',metalness:isStructure?.2:.03,roughness:isFloor?.98:1,side:THREE.DoubleSide,transparent:(m.opacity??1)<1,opacity:m.opacity??1,depthWrite:(m.opacity??1)>=1,emissive:nightLED?'#f7fbff':isWindowGlass?(spaceId==='nightshift'?'#e9f0ee':'#cfe7ee'):'#000000',emissiveIntensity:nightLED?2.2:isWindowGlass?(spaceId==='wess'?0:.82):0});
+  const mat=new THREE.MeshStandardMaterial({color:isWindowGlass?(spaceId==='nightshift'?'#eef1ef':'#e2edef'):m.color||'#dfded7',metalness:isSunken()&&(isStructure||isEquipment)?.35:isStructure?.2:.03,roughness:isFloor?(isSunken()?.72:.98):isSunken()?.62:1,side:THREE.DoubleSide,transparent:(m.opacity??1)<1,opacity:m.opacity??1,depthWrite:(m.opacity??1)>=1,emissive:m.emissive||(nightLED?'#f7fbff':isWindowGlass?(spaceId==='nightshift'?'#e9f0ee':'#cfe7ee'):'#000000'),emissiveIntensity:m.emissive?1.3:nightLED?2.2:isWindowGlass?(spaceId==='wess'?0:.82):0});
   const mesh=new THREE.Mesh(g,mat);mesh.name=m.name;mesh.castShadow=false;mesh.receiveShadow=!isWindowGlass;
   const replacedLighting=isGear()&&/^Lighting_track|^North_track|^North_spot|^Track_stem|^Spot_head|^Spot_diffuser/.test(mesh.name);
   mesh.userData={category:part,isFloor,isRoof,isCeiling,isEquipment,isStructure,wall:roomWall(m),internalWall:!!m.internalWall,cutaway:m.cutaway,unconfirmed:m.unconfirmed,topHidden:m.topHidden,replacedLighting};roomGroup.add(mesh);spaceMeshes.push(mesh);
@@ -175,7 +182,7 @@ function setView(v){
  else if(v==='3d'){const c=room.cameras?.['3d'];camera.position.set(...(c?.position||[9,-6.7,6.9]));controls.target.set(...(c?.target||[cx,cy,1]));camera3.fov=39;}
  else{const c=room.cameras?.[v];if(c){camera.position.set(...c.position);controls.target.set(...c.target);}else camera.position.set(cx,-1.5,1.8);camera3.fov=70;}
  camera.updateProjectionMatrix();camera.lookAt(controls.target);controls.update();resize();
- if(v==='3d'&&(spaceId==='wess'||isGear())){
+ if(v==='3d'&&spaceId!=='nightshift'){
   const radius=Math.hypot(W,D,H)/2,vertical=THREE.MathUtils.degToRad(camera3.fov/2),horizontal=Math.atan(Math.tan(vertical)*camera3.aspect);
   const distance=radius/Math.sin(Math.min(vertical,horizontal))*1.08;
   camera.position.sub(controls.target).normalize().multiplyScalar(distance).add(controls.target);controls.update();
@@ -184,7 +191,7 @@ function setView(v){
  const names={'3d':'입체 배치',top:'평면 배치',A:'A면 · 정면',B:'B면 · 우측',C:'C면 · 후면',D:'D면 · 좌측',...room.viewLabels};
  for(const b of $$('[data-view]')){b.setAttribute('aria-pressed',String(b.dataset.view===v));if(['A','B','C','D'].includes(b.dataset.view))b.textContent=room.viewLabels?.[b.dataset.view]||`${b.dataset.view}면`;}
  $('#stage-title').textContent=`${spaceName()} · ${names[v]}`;
- $('#stage-subtitle').textContent=spaceId==='wess'?'주실 7.920 × 4.565 m · 중앙실 +30 mm':isGear()?'지하 전시장 · 13.95 × 10.75 m · 천고 2.64 m':`${W.toFixed(1)} × ${D.toFixed(1)} m · ${meta.area_m2.toFixed(2)}㎡`;
+ $('#stage-subtitle').textContent=isSunken()?'고천장 공장형 홀 · 16 × 13 m · 리깅 그리드 5.7 m':spaceId==='wess'?'주실 7.920 × 4.565 m · 중앙실 +30 mm':isGear()?'지하 전시장 · 13.95 × 10.75 m · 천고 2.64 m':`${W.toFixed(1)} × ${D.toFixed(1)} m · ${meta.area_m2.toFixed(2)}㎡`;
  const noun=isGear()?'기자재':'사물';$('#hint').textContent=v==='top'?`${noun} 드래그로 이동 · 휠 확대`:v==='3d'?`${noun} 드래그 · 빈 공간 드래그로 회전 · 휠 확대`:`${noun} 드래그로 이동 · 빈 공간 드래그로 시점 변경`;
 }
 
@@ -197,15 +204,15 @@ function applyPeek(state,now,dt){const peek=state.peek;if(!peek){cameraWalk.quat
 function advanceWalk(dt,now=performance.now()){const state=walkState;if(!state)return;const step=state.paused||state.finished?0:dt;if(step)state.time=Math.min(state.plan.total,state.time+step);let remaining=state.time,index=0,segment=state.plan.segments[0];for(;index<state.plan.segments.length-1&&remaining>segment.duration;index++){remaining-=segment.duration;segment=state.plan.segments[index+1]}const fraction=clamp(remaining/segment.duration,0,1),position=segment.kind==='move'?walkPoint(segment.path,fraction):segment.position,headBob=segment.kind==='move'?.013*Math.sin(state.time*Math.PI*3.4)*Math.sin(Math.PI*fraction):0;cameraWalk.position.set(position[0],position[1],state.plan.eye+floorAt(meta,position[0],position[1])+headBob);
  if(segment.kind==='spin'){if(!state.spinStarted){walkDirection.set(0,0,-1).applyQuaternion(state.autoQuaternion);const horizontal=Math.hypot(walkDirection.x,walkDirection.y);state.spinYaw=horizontal>.001?Math.atan2(walkDirection.y,walkDirection.x):0;state.spinPitch=Math.atan2(walkDirection.z,horizontal);state.spinStarted=true;}const yaw=state.spinYaw+Math.PI*2*easeExponentialTurn(fraction),pitch=state.spinPitch;walkTarget.set(position[0]+Math.cos(yaw)*Math.cos(pitch),position[1]+Math.sin(yaw)*Math.cos(pitch),cameraWalk.position.z+Math.sin(pitch));walkLookMatrix.lookAt(cameraWalk.position,walkTarget,cameraWalk.up);state.autoQuaternion.setFromRotationMatrix(walkLookMatrix);}else{walkTarget.set(...segment.focus);if(segment.kind==='look'){const dx=segment.focus[0]-position[0],dy=segment.focus[1]-position[1],length=Math.hypot(dx,dy)||1,lateral=segment.scanH*Math.sin(Math.PI*2*fraction);walkTarget.x-=dy/length*lateral;walkTarget.y+=dx/length*lateral;walkTarget.z+=segment.scanV*Math.sin(Math.PI*fraction);}if(step){state.gaze.lerp(walkTarget,exponentialStep(step,segment.kind==='move'?.8:.55));walkLookMatrix.lookAt(cameraWalk.position,state.gaze,cameraWalk.up);walkRotation.setFromRotationMatrix(walkLookMatrix);const angle=state.autoQuaternion.angleTo(walkRotation),natural=angle*exponentialStep(step,.85),limit=THREE.MathUtils.degToRad(68)*step;state.autoQuaternion.rotateTowards(walkRotation,Math.min(natural,limit));}}
  const peekPhase=applyPeek(state,now,dt);
- const visited=state.plan.segments.slice(0,index).filter(s=>s.kind==='look').length+1,label=segment.id?byId.get(segment.id)?.title||'':'';$('#walk-step').textContent=segment.kind==='spin'?'공간 한 바퀴':state.plan.visits?`${Math.min(visited,state.plan.visits)}/${state.plan.visits} · ${label}`:'입구';$('#walk-detail').textContent=peekPhase==='drag'?'자유 시선 · 드래그 중':peekPhase==='hold'?'잠시 둘러보는 중':peekPhase==='return'?'원래 시선으로 복귀 중':state.paused?'일시정지 · 눈높이 165cm':segment.kind==='spin'?'360° 둘러보는 중':segment.kind==='move'?'이동 중 · 눈높이 165cm':state.plan.visits?`${isGear()?'기자재 확인':'사물 관람'} · 눈높이 165cm`:'눈높이 165cm';$('#walk-progress').value=state.plan.total?Math.round(state.time/state.plan.total*100):100;
+ const visited=state.plan.segments.slice(0,index).filter(s=>s.kind==='look').length+1,label=segment.id==='DUCT'?'덕트 설치':segment.id?byId.get(segment.id)?.title||'':'';$('#walk-step').textContent=segment.kind==='spin'?'공간 한 바퀴':state.plan.visits?`${Math.min(visited,state.plan.visits)}/${state.plan.visits} · ${label}`:'입구';$('#walk-detail').textContent=peekPhase==='drag'?'자유 시선 · 드래그 중':peekPhase==='hold'?'잠시 둘러보는 중':peekPhase==='return'?'원래 시선으로 복귀 중':state.paused?'일시정지 · 눈높이 165cm':segment.kind==='spin'?'360° 둘러보는 중':segment.kind==='move'?'이동 중 · 눈높이 165cm':state.plan.visits?`${isGear()?'기자재 확인':'사물 관람'} · 눈높이 165cm`:'눈높이 165cm';$('#walk-progress').value=state.plan.total?Math.round(state.time/state.plan.total*100):100;
  if(state.time>=state.plan.total){state.finished=true;$('#walk-step').textContent='워킹 완료';$('#walk-detail').textContent='입구부터 전체 경로를 둘러봤습니다';$('#walk-pause').hidden=true;}}
 function startWalk(){
  const returnView=walkState?.returnView||view;
  if(walkState)stopWalk(false);
- const objects=items.map(it=>{
+ const objects=[...ducts.map(d=>{const {hx,hy}=ductExtent(d);return {id:'DUCT',x:d.x,y:d.y,hx,hy,focusZ:floorAt(meta,d.x,d.y)+1.4,scanH:.17,scanV:.11,blocks:true};}),...items.map(it=>{
   const size=displaySize(it),footprint=foot(it),bottom=it.mode==='floor'?.012:it.mode==='plinth'?.18:it.height;
   return {id:it.type,x:it.x,y:it.y,hx:footprint.hx,hy:footprint.hy,focusZ:floorAt(meta,it.x,it.y)+clamp(bottom+size.height*.55,.6,2.5),scanH:clamp(Math.max(size.width,size.depth)*.22,.05,.17),scanV:clamp(size.height*.11,.035,.11),blocks:bottom<1.9};
- });
+ })];
  const plan=planWalk({width:W,depth:D,door:meta.door,objects,metadata:meta});
  if(!plan.segments.length){toast(`보행 가능한 공간이 없습니다. ${isGear()?'기자재':'사물'} 간격을 넓혀 주세요.`);return;}
  if(plan.skipped)toast(`접근 경로가 없는 ${isGear()?'기자재':'사물'} ${plan.skipped}${isGear()?'개':'점'}는 워킹에서 제외했습니다`);
@@ -262,21 +269,22 @@ function updateProjections(){
  if(spaceId==='wess')daylightRig.setDynamic(objectGroup,!!drag);
 }
 function drawItem(item){if(walkState)stopWalk();if(item.root){const oldFixture=item.root.children[0];oldFixture?.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});objectGroup.remove(item.root);}item.root=new THREE.Group();item.root.name=item.uid;item.root.userData.uid=item.uid;const {quaternion,size}=orientation(item),f=fixture(item,size),pivot=new THREE.Group(),model=modelFor(item.type);if(isGear())model.traverse(o=>{if(o.isMesh)o.castShadow=item.type!=='K8'||/K8_Moulded|K8_Dark_acoustic_cloth/.test(o.name);});model.position.z=-byId.get(item.type).dimensions_m.height/2;pivot.quaternion.copy(quaternion);pivot.position.z=f.bottom+size.height/2;pivot.add(model);item.model=pivot;item.root.add(f.group,pivot);item.root.position.set(item.x,item.y,floorAt(meta,item.x,item.y));objectGroup.add(item.root);if(selected===item.uid)updateSelectionBox();updateProjections();trackRig.invalidateShadows();}
-function updateSelectionBox(){if(walkState||settingsMode==='lighting'){if(selectionBox)selectionBox.visible=false;return;}const it=items.find(x=>x.uid===selected);if(!it){if(selectionBox)selectionBox.visible=false;return;}it.root.updateMatrixWorld(true);if(!selectionBox){selectionBox=new THREE.BoxHelper(it.model,0xa45b37);selectionBox.material.transparent=true;selectionBox.material.opacity=.62;selectionBox.material.depthTest=false;selectionBox.renderOrder=50;scene.add(selectionBox);}else{selectionBox.visible=true;selectionBox.setFromObject(it.model);}}
+function updateSelectionBox(){if(walkState||settingsMode==='lighting'){if(selectionBox)selectionBox.visible=false;return;}const duct=selectedDuct(),it=items.find(x=>x.uid===selected)||(duct&&{root:duct.root,model:duct.root.children[0]});if(!it){if(selectionBox)selectionBox.visible=false;return;}it.root.updateMatrixWorld(true);if(!selectionBox){selectionBox=new THREE.BoxHelper(it.model,0xa45b37);selectionBox.material.transparent=true;selectionBox.material.opacity=.62;selectionBox.material.depthTest=false;selectionBox.renderOrder=50;scene.add(selectionBox);}else{selectionBox.visible=true;selectionBox.setFromObject(it.model);}}
 function syncItem(item){if(walkState)stopWalk();if(!normalize(item)){toast(isGear()?"기자재가 공간에 들어가지 않습니다":"사물이 공간에 들어가지 않습니다");return;}drawItem(item);if(selected===item.uid){renderInspector();renderPlaced();}persist();}
-function serializeLayout(){return {title:`9FOREST · ${spaceName()} 공간 배치`,version:isGear()?7:4,space_id:spaceId,...(isGear()?{lighting:trackRig.toJSON()}:spaceId==='wess'?{daylight:daylightRig.toJSON()}:{}),room_m:{width:W,depth:D,height:H},items:items.map(({uid,type,mode,x,y,height,rotation,tiltX,tiltY})=>({type,mode,x,y,height,rotation,tiltX,tiltY,...(type==='PROJECTOR'?{projection:projectorRig.settings(uid)}:{})}))};}
+function serializeLayout(){return {title:`9FOREST · ${spaceName()} 공간 배치`,version:isGear()?7:4,space_id:spaceId,...(isGear()?{lighting:trackRig.toJSON()}:spaceId==='wess'?{daylight:daylightRig.toJSON()}:{}),room_m:{width:W,depth:D,height:H},...(hasDucts()?{ducts:ducts.map(serializeDuct)}:{}),items:items.map(({uid,type,mode,x,y,height,rotation,tiltX,tiltY})=>({type,mode,x,y,height,rotation,tiltX,tiltY,...(type==='PROJECTOR'?{projection:projectorRig.settings(uid)}:{})}))};}
 function persist(){const layout=serializeLayout();memoryLayouts.set(spaceId,layout);try{localStorage.setItem(storageKey(),JSON.stringify(layout));localStorage.setItem('9forest_active_space_v1',spaceId);}catch{}}
 function recommended(type){return (isGear()?GEAR_RECS:RECS)[type]||['floor',''];}
-function defaultPosition(index,type){if(isGear()){const count=items.filter(i=>i.type===type).length;return type==='K8'?(count%2?[9,-8.6]:[3.5,-8.6]):type==='PROJECTOR'?[6.25,-9.45]:[10.2,-6.3];}const spots=spaceId==='wess'?[[1.6,1],[3.4,1],[5.4,1],[7,1.3],[1.6,3.4],[3.4,3.5],[5.9,3.5],[9.5,2.8],[13.3,3.6]]:[[1.05,1.06],[2.55,1.03],[4.2,1.05],[1.15,3.08],[2.7,3.05],[4.3,3.05],[1.8,2],[3.75,2]];return spots[index%spots.length];}
+function defaultPosition(index,type){if(isGear()){const count=items.filter(i=>i.type===type).length;return type==='K8'?(count%2?[9,-8.6]:[3.5,-8.6]):type==='PROJECTOR'?[6.25,-9.45]:[10.2,-6.3];}const spots=isSunken()?[[1,-1],[3,-1],[5,-1],[7,-1],[1,-2.5],[3,-2.5],[5,-2.5],[7,-2.5],[1,-4],[3,-4],[5,-4],[7,-4]]:spaceId==='wess'?[[1.6,1],[3.4,1],[5.4,1],[7,1.3],[1.6,3.4],[3.4,3.5],[5.9,3.5],[9.5,2.8],[13.3,3.6]]:[[1.05,1.06],[2.55,1.03],[4.2,1.05],[1.15,3.08],[2.7,3.05],[4.3,3.05],[1.8,2],[3.75,2]];return spots[index%spots.length];}
 function addItem(type,from=null){if(walkState)stopWalk();const o=byId.get(type);if(!o)return;if(items.length>=100){toast('한 공간에 최대 100개까지 배치할 수 있습니다');return;}const [x,y]=from?[from.x+.3,from.y+.3]:defaultPosition(items.length,type),mode=from?.mode||recommended(type)[0];const item=normalize({uid:'item-'+Date.now().toString(36)+'-'+(++sequence),type,mode,x,y,height:from?.height??1.25,rotation:from?.rotation??(isGear()&&type==='PROJECTOR'?180:0),tiltX:from?.tiltX??0,tiltY:from?.tiltY??0,projection:from?.projection?structuredClone(from.projection):undefined});if(!item){toast('이 장비를 배치할 수 있는 공간이 없습니다');return;}items.push(item);drawItem(item);select(item.uid);renderCatalog();persist();toast(o.title+' 배치됨');}
 function removeItem(uid){if(walkState)stopWalk();const i=items.findIndex(x=>x.uid===uid);if(i<0)return;items[i].root.children[0]?.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});objectGroup.remove(items[i].root);items.splice(i,1);trackRig.invalidateShadows();updateProjections();selected=null;updateSelectionBox();renderPlaced();renderInspector();persist();toast('배치에서 제거했습니다');}
-function select(uid){selected=uid;if(isGear())setSettingsMode('gear');updateSelectionBox();renderPlaced();renderInspector();}
+function select(uid){selected=uid;if(isGear())setSettingsMode('gear');for(const d of ducts)highlightDuct(d);updateSelectionBox();renderPlaced();renderInspector();}
 function selectedItem(){return items.find(x=>x.uid===selected);}
-function renderPlaced(){const el=$('#placed-list');$('#placed-count').textContent=items.length+(isGear()?'개':'점');if(!items.length){el.innerHTML=`<p class="empty">왼쪽 아래에서 ${isGear()?'기자재':'사물'}를 추가하세요.</p>`;return;}el.innerHTML=items.map((it,i)=>`<button class="placed-row" data-uid="${esc(it.uid)}" aria-current="${selected===it.uid}"><span><strong>${esc(byId.get(it.type).title)}</strong><small>${esc(MODE[it.mode])} · ${round(it.x).toFixed(2)}, ${round(it.y).toFixed(2)} m</small></span><span class="idx">${String(i+1).padStart(2,'0')}</span></button>`).join('');for(const b of el.querySelectorAll('button'))b.addEventListener('click',()=>select(b.dataset.uid));}
-function renderCatalog(){const q=$('#search').value.trim().toLowerCase();const filtered=library.filter(o=>(o.title+o.id).toLowerCase().includes(q));$('#catalog').innerHTML=filtered.map(o=>`<div class="catalog-item">${o.photo?`<img src="${o.photo}" alt="">`:''}<div><strong>${esc(o.title)}</strong><small>${esc(o.id)} · ${esc(MODE[recommended(o.id)[0]])}</small></div><button data-add="${esc(o.id)}" aria-label="${esc(o.title)} 추가">추가</button></div>`).join('')||'<p class="empty">검색 결과가 없습니다.</p>';for(const b of $('#catalog').querySelectorAll('[data-add]'))b.addEventListener('click',()=>addItem(b.dataset.add));}
+function renderPlaced(){const el=$('#placed-list');$('#placed-count').textContent=items.length+ducts.length+(isGear()?'개':'점');if(!items.length&&!ducts.length){el.innerHTML=`<p class="empty">왼쪽 아래에서 ${isGear()?'기자재':'사물'}를 추가하세요.</p>`;return;}el.innerHTML=items.map((it,i)=>`<button class="placed-row" data-uid="${esc(it.uid)}" aria-current="${selected===it.uid}"><span><strong>${esc(byId.get(it.type).title)}</strong><small>${esc(MODE[it.mode])} · ${round(it.x).toFixed(2)}, ${round(it.y).toFixed(2)} m</small></span><span class="idx">${String(i+1).padStart(2,'0')}</span></button>`).join('')+ducts.map((d,i)=>`<button class="placed-row" data-uid="${esc(d.uid)}" aria-current="${selected===d.uid}"><span><strong>덕트 설치 · ${d.seed}</strong><small>${esc(DUCT_MODE[d.plan?.sceneMode]||'')} · ${round(d.x).toFixed(2)}, ${round(d.y).toFixed(2)} m</small></span><span class="idx">D${i+1}</span></button>`).join('');for(const b of el.querySelectorAll('button'))b.addEventListener('click',()=>select(b.dataset.uid));}
+function renderCatalog(){const q=$('#search').value.trim().toLowerCase();const filtered=library.filter(o=>(o.title+o.id).toLowerCase().includes(q));$('#catalog').innerHTML=(hasDucts()&&'덕트 duct'.includes(q)?DUCT_CARD:'')+filtered.map(o=>`<div class="catalog-item">${o.photo?`<img src="${o.photo}" alt="">`:''}<div><strong>${esc(o.title)}</strong><small>${esc(o.id)} · ${esc(MODE[recommended(o.id)[0]])}</small></div><button data-add="${esc(o.id)}" aria-label="${esc(o.title)} 추가">추가</button></div>`).join('')||'<p class="empty">검색 결과가 없습니다.</p>';for(const b of $('#catalog').querySelectorAll('[data-add]'))b.addEventListener('click',()=>b.dataset.add==='DUCT'?addDuct():addItem(b.dataset.add));}
 function occupied(item){const a=foot(item);return items.filter(other=>other!==item).some(other=>{const b=foot(other);return Math.abs(item.x-other.x)<a.hx+b.hx-.03&&Math.abs(item.y-other.y)<a.hy+b.hy-.03;});}
 function renderInspector(){
  if(isGear()){renderGearInspector();return;}
+ const duct=selectedDuct();if(duct){renderDuctInspector(duct);return;}
  const el=$('#inspector'),it=selectedItem();
  if(!it){el.innerHTML='<div class="right-empty"><h3>사물을 선택하세요</h3><ol><li>왼쪽 목록에서 사물을 추가합니다.</li><li>공간 안에서 끌어 위치를 바꿉니다.</li><li>거치 방식과 회전 방향을 설정합니다.</li></ol><p class="mini-note">마지막 배치는 이 브라우저에 자동 저장됩니다. 다른 컴퓨터로 옮길 때는 상단의 배치 저장을 사용하세요.</p></div>';return;}
  const o=byId.get(it.type),rec=recommended(it.type),mounted=it.mode==='rod'||it.mode==='hang';
@@ -298,6 +306,7 @@ function renderInspector(){
  }
  $('#reset-rotation').addEventListener('click',()=>{it.rotation=0;it.tiltX=0;it.tiltY=0;syncItem(it);});
  $('#duplicate').addEventListener('click',()=>addItem(it.type,it));$('#remove').addEventListener('click',()=>removeItem(it.uid));
+ if(hasDucts())$('#collision-note').insertAdjacentHTML('afterend',`<p id="duct-note" class="micro" style="color:#a15e3f" ${ductHit(it)?'':'hidden'}>덕트와 겹칩니다. 덕트를 선택해 ‘사물 피해 다시 생성’을 누르세요.</p>`);
 }
 function renderGearInspector(){
  const el=$('#inspector'),it=selectedItem();
@@ -327,7 +336,81 @@ function renderGearInspector(){
  $('#duplicate').addEventListener('click',()=>addItem(it.type,it));$('#remove').addEventListener('click',()=>removeItem(it.uid));
 }
 
-function moveSelected(it,x,y){it.x=x;it.y=y;normalize(it);drawItem(it);const ix=$('#pos-x'),iy=$('#pos-y');if(ix)ix.value=it.x.toFixed(2);if(iy)iy.value=it.y.toFixed(2);const warning=$('#collision-note');if(warning)warning.hidden=!occupied(it);}
+// Duct installations (Sunken): the duct-simulator generator fills its own W×D×H
+// region box. Moving the box keeps the generated route; 새로 생성 and
+// 사물 피해 다시 생성 re-run it explicitly.
+const DUCT_FIELDS=['seed','complexity','type','mode','count','diameter','W','D','H','supports','plinth','avoid'];
+const DUCT_CARD='<div class="catalog-item"><svg class="duct-icon" viewBox="0 0 38 38" aria-hidden="true"><path d="M8 34V18a8 8 0 0 1 8-8h18" fill="none" stroke="currentColor" stroke-width="8"/><path d="M4 25h8M4 29h8M24 6v8M28 6v8" stroke="var(--panel)" stroke-width="1.4"/></svg><div><strong>덕트 설치</strong><small>DUCT · 랜덤 생성</small></div><button data-add="DUCT" aria-label="덕트 설치 추가">추가</button></div>';
+function selectedDuct(){return ducts.find(d=>d.uid===selected);}
+function serializeDuct(d){return {...Object.fromEntries(DUCT_FIELDS.map(k=>[k,d[k]])),x:round(d.x),y:round(d.y),rotation:round(d.rotation)};}
+function validateDucts(list){if(!Array.isArray(list)||list.length>20)throw Error('덕트 설치 정보를 확인해 주세요.');for(const d of list)if(!d||['x','y','rotation','complexity','diameter','W','D','H','count'].some(k=>d[k]!=null&&!Number.isFinite(Number(d[k]))))throw Error('덕트 설치 정보를 확인해 주세요.');}
+function ductExtent(d){const a=d.rotation*Math.PI/180,c=Math.abs(Math.cos(a)),s=Math.abs(Math.sin(a));return {hx:(d.W*c+d.D*s)/2,hy:(d.W*s+d.D*c)/2};}
+// World point -> the generator's Y-up frame (x right, y up, z = -region Y).
+function ductLocal(d,x,y,z){const a=d.rotation*Math.PI/180,dx=x-d.x,dy=y-d.y;return [dx*Math.cos(a)+dy*Math.sin(a),z-floorAt(meta,d.x,d.y),dx*Math.sin(a)-dy*Math.cos(a)];}
+function itemBox(it){const s=displaySize(it),{hx,hy}=foot(it),bottom=it.mode==='floor'?.012:it.mode==='plinth'?.18:it.height,z=floorAt(meta,it.x,it.y);return {x0:it.x-hx,x1:it.x+hx,y0:it.y-hy,y1:it.y+hy,z0:z+(it.mode==='plinth'||it.mode==='rod'?0:bottom),z1:z+bottom+s.height};}
+function ductBox(d,b){const p=[];for(const x of [b.x0,b.x1])for(const y of [b.y0,b.y1])for(const z of [b.z0,b.z1])p.push(ductLocal(d,x,y,z));const lo=i=>Math.min(...p.map(v=>v[i])),hi=i=>Math.max(...p.map(v=>v[i]));return {x0:lo(0),x1:hi(0),y0:lo(1),y1:hi(1),z0:lo(2),z1:hi(2)};}
+function ductConflicts(d){if(!d.plan)return [];return items.filter(it=>{const b=ductBox(d,itemBox(it));return d.plan.samples.some(([x,y,z,r])=>x>b.x0-r&&x<b.x1+r&&y>b.y0-r&&y<b.y1+r&&z>b.z0-r&&z<b.z1+r);});}
+function ductHit(it){return ducts.some(d=>ductConflicts(d).includes(it));}
+function normalizeDuct(d){
+ Object.assign(d,normalizeDuctParams(d));d.rotation=Number.isFinite(+d.rotation)?((+d.rotation%360)+360)%360:0;
+ const x=Number.isFinite(+d.x)?+d.x:cx,y=Number.isFinite(+d.y)?+d.y:cy;d.H=round(Math.min(d.H,roofZ(y)-floorAt(meta,x,y)));
+ const {hx,hy}=ductExtent(d),fit=fitPlacement(meta,x,y,hx,hy,{bottom:0,top:d.H});if(!fit)return null;d.x=fit.x;d.y=fit.y;return d;
+}
+function disposeDuct(d){if(!d.root)return;d.root.traverse(o=>{if(o.geometry&&!isSharedDuctResource(o.geometry))o.geometry.dispose();for(const m of [o.material].flat())if(m&&!isSharedDuctResource(m))m.dispose();});objectGroup.remove(d.root);d.root=null;}
+function highlightDuct(d){if(!d.root)return;const on=selected===d.uid;for(const o of d.root.children){if(o.userData.ductPad)o.material.opacity=on?.1:.035;if(o.userData.ductOutline)o.visible=on;}}
+function drawDuct(d,regenerate=true){
+ if(walkState)stopWalk();
+ if(regenerate||!d.plan)d.plan=planDuct(d,d.avoid?items.map(it=>ductBox(d,itemBox(it))):[]);
+ disposeDuct(d);const root=new THREE.Group();root.name=d.uid;root.userData.uid=d.uid;
+ const model=buildDuct(d.plan);model.rotation.x=Math.PI/2;root.add(model);
+ const pad=new THREE.Mesh(new THREE.PlaneGeometry(d.W,d.D),new THREE.MeshBasicMaterial({color:0xa45b37,transparent:true,opacity:.035,depthWrite:false}));pad.position.z=.007;pad.renderOrder=1;pad.userData.ductPad=true;
+ const outline=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(d.W,d.D,d.H)),new THREE.LineBasicMaterial({color:0xa45b37,transparent:true,opacity:.4}));outline.position.z=d.H/2;outline.raycast=()=>{};outline.userData.ductOutline=true;
+ // The bold edge is the back face that 벽면 부착 ducts treat as the wall.
+ const back=new THREE.Mesh(new THREE.BoxGeometry(d.W,.05,.012),new THREE.MeshBasicMaterial({color:0xa45b37}));back.position.set(0,d.D/2-.025,.008);
+ root.add(pad,outline,back);root.position.set(d.x,d.y,floorAt(meta,d.x,d.y));root.rotation.z=d.rotation*Math.PI/180;
+ d.root=root;objectGroup.add(root);highlightDuct(d);if(selected===d.uid)updateSelectionBox();trackRig.invalidateShadows();
+}
+function syncDuct(d,regenerate=true){if(!normalizeDuct(d)){toast('덕트 영역이 공간에 들어가지 않습니다');return false;}drawDuct(d,regenerate);renderPlaced();if(selected===d.uid)renderInspector();persist();return true;}
+function moveDuct(d,x,y){d.x=x;d.y=y;if(!normalizeDuct(d))return;d.root.position.set(d.x,d.y,floorAt(meta,d.x,d.y));updateSelectionBox();const ix=$('#duct-x'),iy=$('#duct-y');if(ix)ix.value=d.x.toFixed(2);if(iy)iy.value=d.y.toFixed(2);}
+function addDuct(params={}){
+ if(!hasDucts())return null;if(walkState)stopWalk();if(ducts.length>=20){toast('덕트 설치는 한 공간에 20개까지 추가할 수 있습니다');return null;}
+ const d=normalizeDuct({x:4,y:-2.5,rotation:0,seed:Math.floor(Math.random()*1e9),...params,uid:'duct-'+Date.now().toString(36)+'-'+(++sequence)});
+ if(!d){toast('덕트 영역을 놓을 자리가 없습니다');return null;}
+ ducts.push(d);drawDuct(d);select(d.uid);persist();toast(`덕트 설치 추가됨 · 덕트 ${d.plan.totals.ducts}개`);return d.uid;
+}
+function removeDuct(uid){const i=ducts.findIndex(d=>d.uid===uid);if(i<0)return;disposeDuct(ducts[i]);ducts.splice(i,1);selected=null;updateSelectionBox();renderPlaced();renderInspector();persist();toast('덕트 설치를 제거했습니다');}
+function loadDucts(raw){if(walkState)stopWalk();for(const d of ducts)disposeDuct(d);ducts=[];if(hasDucts())for(const r of raw.slice(0,20)){const d=normalizeDuct({...r,uid:'duct-'+Date.now().toString(36)+'-'+(++sequence)});if(d){ducts.push(d);drawDuct(d);}}if(!selectedItem()&&!selectedDuct())selected=items[0]?.uid||ducts[0]?.uid||null;for(const d of ducts)highlightDuct(d);updateSelectionBox();renderPlaced();renderInspector();persist();}
+function exportDuctGLB(d){new GLTFExporter().parse(d.root.children[0],res=>download(res,`9forest_duct_${d.seed}.glb`,'model/gltf-binary'),err=>toast('GLB 내보내기 실패: '+err),{binary:true});}
+function renderDuctInspector(d){
+ const el=$('#inspector'),conflicts=ductConflicts(d);
+ const choice=(id,label,value,options)=>`<div class="field full"><label for="${id}">${label}</label><select id="${id}">${options.map(([k,t])=>`<option value="${k}" ${k===value?'selected':''}>${t}</option>`).join('')}</select></div>`;
+ const slider=(id,label,min,max,step,value,shown)=>`<div class="light-slider"><label for="${id}">${label}<output id="${id}-v">${shown}</output></label><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"></div>`;
+ const kv=rows=>`<div class="duct-kv">${rows.map(([k,v])=>`<span>${esc(k)}</span><b>${esc(v)}</b>`).join('')}</div>`;
+ el.innerHTML=`<div class="inspector duct-editor"><div class="object-title"><h3>덕트 설치</h3><span class="badge">DUCT</span></div><p class="micro">덕트 시뮬레이터의 생성 규칙으로 영역 안에 스파이럴·플렉시블 덕트를 랜덤 생성합니다. 같은 시드에서 값만 바꾸면 비교가 쉽습니다.</p>
+<div class="row-actions"><button id="duct-new">새로 생성</button><button id="duct-reroute">사물 피해 다시 생성</button></div>
+<div class="field full" style="margin-top:12px"><label for="duct-seed">시드</label><input id="duct-seed" type="number" min="1" step="1" value="${d.seed}"></div>
+${slider('duct-complexity','복잡도',1,10,.5,d.complexity,d.complexity)}
+${choice('duct-type','덕트 종류',d.type,[['auto','자동 (랜덤)'],['rigid','스파이럴 강성 덕트'],['flex','플렉시블 알루미늄'],['mix','혼합']])}
+${choice('duct-mode','설치 방식',d.mode,[['auto','자동 (랜덤)'],['floor','바닥 설치'],['wall','벽면 부착'],['ceiling','천장 매달기'],['mixed','혼합']])}
+${slider('duct-count','덕트 개수',0,8,1,d.count,d.count||'자동')}
+${slider('duct-diameter','기본 직경 (m)',.2,1.4,.05,d.diameter,d.diameter.toFixed(2))}
+<div class="rule"></div><span class="control-label">설치 영역 (m)</span><div class="coord-grid"><div class="field"><label for="duct-W">폭</label><input id="duct-W" type="number" min="2" max="16" step="0.5" value="${d.W}"></div><div class="field"><label for="duct-D">깊이</label><input id="duct-D" type="number" min="2" max="13" step="0.5" value="${d.D}"></div><div class="field"><label for="duct-H">높이</label><input id="duct-H" type="number" min="2" max="${round(roofZ(d.y)-floorAt(meta,d.x,d.y))}" step="0.1" value="${d.H}"></div><div class="field"><label for="duct-rotation">회전 (°)</label><input id="duct-rotation" type="number" min="0" max="360" step="15" value="${round(d.rotation)}"></div><div class="field"><label for="duct-x">좌우 X</label><input id="duct-x" type="number" step="0.05" value="${round(d.x).toFixed(2)}"></div><div class="field"><label for="duct-y">앞뒤 Y</label><input id="duct-y" type="number" step="0.05" value="${round(d.y).toFixed(2)}"></div></div>
+<div class="light-switches" style="margin-top:12px"><label><input type="checkbox" id="duct-supports" ${d.supports?'checked':''}>지지대</label><label><input type="checkbox" id="duct-plinth" ${d.plinth?'checked':''}>좌대</label><label><input type="checkbox" id="duct-avoid" ${d.avoid?'checked':''}>생성할 때 배치된 사물 피하기</label></div>
+<p class="mini-note">높이는 리깅 그리드(5.7 m)까지입니다. 천장 매달기는 영역 윗면에 매답니다. 벽면 부착은 영역의 굵은 선 쪽을 벽으로 씁니다. 회전 90°로 서측(D) 박공벽에 붙이면 필라스터 없이 넓게 쓸 수 있습니다.</p>
+${conflicts.length?`<p class="micro" style="color:#a15e3f">덕트와 겹치는 사물 ${conflicts.length}점: ${esc(conflicts.map(it=>byId.get(it.type).title).join(', '))}</p>`:''}
+<div class="rule"></div><span class="control-label">결과</span>${kv(d.plan.stats)}<span class="control-label" style="margin-top:12px">복잡도 → 생성 파라미터</span>${kv(d.plan.rules)}
+<div class="row-actions"><button id="duct-dup">복제</button><button id="duct-glb">GLB</button><button id="duct-remove" class="danger">제거</button></div></div>`;
+ let pending=0;const regen=()=>{clearTimeout(pending);pending=setTimeout(()=>syncDuct(d),30);};
+ for(const k of ['complexity','count','diameter']){const inp=$('#duct-'+k);inp.addEventListener('input',()=>{$('#duct-'+k+'-v').textContent=k==='count'?(+inp.value||'자동'):k==='diameter'?(+inp.value).toFixed(2):inp.value;d[k]=+inp.value;});inp.addEventListener('change',regen);}
+ for(const k of ['type','mode'])$('#duct-'+k).addEventListener('change',e=>{d[k]=e.target.value;regen();});
+ for(const k of ['W','D','H','seed'])$('#duct-'+k).addEventListener('change',e=>{d[k]=Number(e.target.value);regen();});
+ for(const k of ['supports','plinth','avoid'])$('#duct-'+k).addEventListener('change',e=>{d[k]=e.target.checked;if(k==='avoid')persist();else regen();});
+ for(const k of ['x','y','rotation'])$('#duct-'+k).addEventListener('change',e=>{d[k]=Number(e.target.value);syncDuct(d,false);});
+ $('#duct-new').addEventListener('click',()=>{d.seed=Math.floor(Math.random()*1e9);syncDuct(d);});
+ $('#duct-reroute').addEventListener('click',()=>{d.avoid=true;syncDuct(d);toast(ductConflicts(d).length?'일부 사물은 피하지 못했습니다':'사물을 피해 다시 생성했습니다');});
+ $('#duct-dup').addEventListener('click',()=>addDuct({...serializeDuct(d),x:d.x+.5,y:d.y-.5}));$('#duct-glb').addEventListener('click',()=>exportDuctGLB(d));$('#duct-remove').addEventListener('click',()=>removeDuct(d.uid));
+}
+function moveSelected(it,x,y){it.x=x;it.y=y;normalize(it);drawItem(it);const ix=$('#pos-x'),iy=$('#pos-y');if(ix)ix.value=it.x.toFixed(2);if(iy)iy.value=it.y.toFixed(2);const warning=$('#collision-note');if(warning)warning.hidden=!occupied(it);const ductNote=$('#duct-note');if(ductNote)ductNote.hidden=!ductHit(it);}
 const caster=new THREE.Raycaster(),mouse=new THREE.Vector2(),floorPlane=new THREE.Plane(new THREE.Vector3(0,0,1),0),lightPlane=new THREE.Plane(new THREE.Vector3(0,0,1),-2.58),hitPoint=new THREE.Vector3();
 function pointer(e){const r=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);caster.setFromCamera(mouse,camera);}
 function beginWalkPointer(e){if(e.button!==0||walkState.pointer)return;walkState.pointer={id:e.pointerId,startX:e.clientX,startY:e.clientY,lastX:e.clientX,lastY:e.clientY};renderer.domElement.setPointerCapture(e.pointerId);e.preventDefault();}
@@ -335,13 +418,13 @@ function moveWalkPointer(e){const state=walkState,p=state?.pointer;if(!p||e.poin
 function endWalkPointer(e){const state=walkState,p=state?.pointer;if(!p||e.pointerId!==p.id)return false;state.pointer=null;if(state.peek?.dragging){state.peek.dragging=false;state.peek.origin=state.peek.quaternion.clone();state.peek.releasedAt=performance.now();}return true;}
 renderer.domElement.addEventListener('pointerdown',e=>{
  if(walkState){beginWalkPointer(e);return;}if(e.button!==0)return;pointer(e);
- const hit=caster.intersectObjects([...items.map(i=>i.root),...trackRig.pickables],true)[0];if(!hit)return;
+ const hit=caster.intersectObjects([...items.map(i=>i.root),...ducts.map(d=>d.root),...trackRig.pickables],true)[0];if(!hit)return;
  let node=hit.object;while(node.parent&&!node.userData.lampId&&!node.userData.uid)node=node.parent;
  if(node.userData.lampId){
   const id=node.userData.lampId;trackRig.select(id);setSettingsMode('lighting');
   if(caster.ray.intersectPlane(lightPlane,hitPoint)){const l=trackRig.selectedLamp,p=railPoint(l.rail,l.t);drag={lampId:id,dx:p[0]-hitPoint.x,dy:p[1]-hitPoint.y,pointer:e.pointerId};}
  }else{
-  const it=items.find(x=>x.uid===node.userData.uid);if(!it)return;select(it.uid);
+  const it=items.find(x=>x.uid===node.userData.uid)||ducts.find(x=>x.uid===node.userData.uid);if(!it)return;select(it.uid);
   if(caster.ray.intersectPlane(floorPlane,hitPoint))drag={uid:it.uid,dx:it.x-hitPoint.x,dy:it.y-hitPoint.y,pointer:e.pointerId};
  }
  if(drag){controls.enabled=false;renderer.domElement.setPointerCapture(e.pointerId);}
@@ -350,12 +433,12 @@ renderer.domElement.addEventListener('pointermove',e=>{
  if(walkState){moveWalkPointer(e);return;}if(!drag||e.pointerId!==drag.pointer)return;pointer(e);
  if(caster.ray.intersectPlane(drag.lampId?lightPlane:floorPlane,hitPoint)){
   if(drag.lampId){trackRig.move(drag.lampId,hitPoint.x+drag.dx,hitPoint.y+drag.dy);lightEditor.refreshPosition();}
-  else{const it=items.find(x=>x.uid===drag.uid);if(it)moveSelected(it,hitPoint.x+drag.dx,hitPoint.y+drag.dy);}
+  else{const it=items.find(x=>x.uid===drag.uid),duct=ducts.find(x=>x.uid===drag.uid);if(it)moveSelected(it,hitPoint.x+drag.dx,hitPoint.y+drag.dy);if(duct)moveDuct(duct,hitPoint.x+drag.dx,hitPoint.y+drag.dy);}
  }
 });
-function stopDrag(){if(!drag)return;const {uid,lampId}=drag;drag=null;controls.enabled=true;renderPlaced();persist();if(lampId)lightEditor.render();else{const it=items.find(x=>x.uid===uid);if(it)renderInspector();}}
+function stopDrag(){if(!drag)return;const {uid,lampId}=drag;drag=null;controls.enabled=true;renderPlaced();persist();if(lampId)lightEditor.render();else if(items.some(x=>x.uid===uid)||ducts.some(x=>x.uid===uid))renderInspector();}
 renderer.domElement.addEventListener('pointerup',e=>{if(!endWalkPointer(e))stopDrag();});renderer.domElement.addEventListener('pointercancel',e=>{if(!endWalkPointer(e))stopDrag();});renderer.domElement.addEventListener('lostpointercapture',e=>{if(!endWalkPointer(e))stopDrag();});
-renderer.domElement.addEventListener('keydown',e=>{if(walkState)return;const it=selectedItem();if(!it)return;const step=e.shiftKey?.10:.05;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();if(e.key==='ArrowLeft')it.x-=step;if(e.key==='ArrowRight')it.x+=step;if(e.key==='ArrowUp')it.y+=step;if(e.key==='ArrowDown')it.y-=step;syncItem(it);}});
+renderer.domElement.addEventListener('keydown',e=>{if(walkState)return;const duct=selectedDuct();if(duct&&e.key.startsWith('Arrow')){e.preventDefault();const step=e.shiftKey?.10:.05;moveDuct(duct,duct.x+(e.key==='ArrowRight')*step-(e.key==='ArrowLeft')*step,duct.y+(e.key==='ArrowUp')*step-(e.key==='ArrowDown')*step);persist();renderPlaced();return;}const it=selectedItem();if(!it)return;const step=e.shiftKey?.10:.05;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();if(e.key==='ArrowLeft')it.x-=step;if(e.key==='ArrowRight')it.x+=step;if(e.key==='ArrowUp')it.y+=step;if(e.key==='ArrowDown')it.y-=step;syncItem(it);}});
 
 function download(content,name,mime){const blob=new Blob([content],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 function validateLayout(data){
@@ -364,6 +447,7 @@ function validateLayout(data){
  if(data.version!=null&&![2,3,4,5,6,7].includes(data.version))throw Error('지원하지 않는 배치 파일 버전입니다.');
  const validTypes=new Set((id==='spacehim'?input.equipment:input.objects).map(o=>o.id));
  for(const r of data.items){if(!r||!validTypes.has(r.type)||['x','y','height','rotation','tiltX','tiltY'].some(k=>r[k]!=null&&!Number.isFinite(Number(r[k]))))throw Error('배치 위치나 종류를 확인해 주세요.');if(r.type==='PROJECTOR')validateProjection(r.projection);}
+ if(data.ducts!=null)validateDucts(data.ducts);
  if(id==='spacehim')validateLighting(data.lighting);if(id==='wess')validateDaylight(data.daylight);
  return id;
 }
@@ -377,6 +461,7 @@ function restoreItems(){
   if(stored&&validateLayout({...stored,space_id:stored.space_id??spaceId})===spaceId){if(isGear())trackRig.restore(stored.lighting);if(spaceId==='wess')daylightRig.restore(stored.daylight);loadItems(layoutItems({...stored,space_id:stored.space_id??spaceId}));}
   else{if(isGear())trackRig.restore();if(spaceId==='wess')daylightRig.restore();loadItems(fallback);}
  }catch{if(isGear())trackRig.restore();if(spaceId==='wess')daylightRig.restore();loadItems(fallback);}
+ try{loadDucts(hasDucts()&&Array.isArray(stored?.ducts)?stored.ducts:[]);}catch{loadDucts([]);}
  applySpaceLighting();
 }
 function setSpace(id,{initial=false}={}){
@@ -384,26 +469,26 @@ function setSpace(id,{initial=false}={}){
  if(!initial&&id===spaceId)return;
  if(walkState)stopWalk(false);if(drag){const p=drag.pointer;stopDrag();if(renderer.domElement.hasPointerCapture(p))renderer.domElement.releasePointerCapture(p);}
  if(!initial)persist();
- for(const it of items){clearGroup(it.root.children[0]);objectGroup.remove(it.root);}items=[];selected=null;
+ for(const it of items){clearGroup(it.root.children[0]);objectGroup.remove(it.root);}items=[];for(const d of ducts)disposeDuct(d);ducts=[];selected=null;
  projectorRig.clear();setRoomData(id);$('#unconfirmed').checked=false;$('#unconfirmed-control').hidden=!isGear();buildRoom();$('#space-select').value=id;$('#search').value='';
- $('#space-note').textContent=isGear()?'도면 방향으로 표시 · 천고 2.64 m · 내부 구획 치수 확인 필요':id==='wess'?'도면 기반 · 층고 2.70 m 가정 · 공간별 배치 자동 저장':'사진 기반 공간 복원 · 공간별 배치 자동 저장';
+ $('#space-note').textContent=isSunken()?'[virtual] nineforests v5 콘셉트 공간 · 행잉 기준 리깅 5.7 m · 공간별 배치 자동 저장':isGear()?'도면 방향으로 표시 · 천고 2.64 m · 내부 구획 치수 확인 필요':id==='wess'?'도면 기반 · 층고 2.70 m 가정 · 공간별 배치 자동 저장':'사진 기반 공간 복원 · 공간별 배치 자동 저장';
  if(isGear())$('#space-note').insertAdjacentHTML('beforeend','<br><a href="https://github.com/choiboryeon/9forest_viewer/blob/main/docs/spacehim-model-review.md" target="_blank" rel="noopener">구조 검토 보고서 보기</a>');
  $('#library-eyebrow').textContent=isGear()?'PERFORMANCE GEAR / 4 UNITS':'OBJECT LIBRARY / 20';
  $('#library-title').textContent=isGear()?'기자재 선택':'사물 선택';
- $('#library-intro').textContent=isGear()?'K8 스피커 2대와 스탠드, 믹서, 단초점 프로젝터를 이동해 공연 배치를 검토하세요.':'사물을 추가한 뒤 공간 안에서 끌어 놓으세요.';
- $('#catalog-title').textContent=isGear()?'공연 기자재':'사물 20점';$('#search').placeholder=isGear()?'기자재 검색':'사물 검색';
+ $('#library-intro').textContent=hasDucts()?'덕트 설치와 사물을 추가한 뒤 공간 안에서 끌어 놓으세요.':isGear()?'K8 스피커 2대와 스탠드, 믹서, 단초점 프로젝터를 이동해 공연 배치를 검토하세요.':'사물을 추가한 뒤 공간 안에서 끌어 놓으세요.';
+ $('#catalog-title').textContent=isGear()?'공연 기자재':hasDucts()?'덕트 · 사물 20점':'사물 20점';$('#search').placeholder=isGear()?'기자재 검색':'사물 검색';
  $('.left').dataset.gear=String(isGear());$('.left').setAttribute('aria-label',isGear()?'기자재 목록':'사물 목록');$('.right').setAttribute('aria-label',isGear()?'선택한 기자재 설정':'선택한 사물 설정');$('.stage').setAttribute('aria-label',isGear()?'기자재 배치 공간':'사물 배치 공간');
  $('#settings-eyebrow').textContent=isGear()?'GEAR SETTINGS':'OBJECT SETTINGS';$('#settings-title').textContent='배치 설정';
  $('#footer-help').textContent=isGear()?'위치, 방향, 스탠드 높이를 조정하세요. 투사 화면은 설계 검토용이며 실제 설치 전 현장 치수와 전원·케이블 동선을 확인하세요.':'위치와 거치 높이는 화면에서 바로 조정할 수 있습니다. 설치 전에는 실제 치수와 하중을 확인하세요.';
  document.title=`9FOREST Viewer · ${spaceName()} 공간`;
  setView('3d');restoreItems();renderCatalog();setSettingsMode('gear');$('#clear-layout').textContent=isGear()?'기자재 비우기':'배치 비우기';
 }
-function importLayout(data){const id=validateLayout(data);setSpace(id);if(isGear()){trackRig.restore(data.lighting);applySpaceLighting();lightEditor.render();}if(id==='wess'){daylightRig.restore(data.daylight);daylightUI.render();}loadItems(layoutItems(data));return serializeLayout();}
+function importLayout(data){const id=validateLayout(data);setSpace(id);if(isGear()){trackRig.restore(data.lighting);applySpaceLighting();lightEditor.render();}if(id==='wess'){daylightRig.restore(data.daylight);daylightUI.render();}loadItems(layoutItems(data));loadDucts(hasDucts()?data.ducts||[]:[]);return serializeLayout();}
 renderCatalog();$('#search').addEventListener('input',renderCatalog);
 $('#space-select').addEventListener('change',e=>{setSpace(e.target.value);toast(`${spaceName()} 공간을 불러왔습니다`);});
 $('#save-layout').addEventListener('click',()=>{download(JSON.stringify(serializeLayout(),null,2),`9forest_${spaceId}_layout.json`,'application/json');toast('배치 파일을 저장했습니다');});
 $('#load-layout').addEventListener('click',()=>$('#layout-file').click());$('#layout-file').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;try{importLayout(JSON.parse(await file.text()));toast(`${spaceName()} 배치를 불러왔습니다`);}catch(err){toast(err.message||'배치 파일을 읽지 못했습니다');}e.target.value='';});
-$('#clear-layout').addEventListener('click',()=>{loadItems([]);toast('배치를 비웠습니다');});
+$('#clear-layout').addEventListener('click',()=>{loadItems([]);loadDucts([]);toast('배치를 비웠습니다');});
 $('#export-png').addEventListener('click',()=>{renderer.render(scene,camera);const src=renderer.domElement,c=document.createElement('canvas');c.width=src.width;c.height=src.height;const ctx=c.getContext('2d');const dark=document.documentElement.dataset.theme==='dark';ctx.fillStyle=dark?'#17211d':'#e7ece5';ctx.fillRect(0,0,c.width,c.height);ctx.drawImage(src,0,0);ctx.fillStyle=dark?'#e8eee7':'#273c32';ctx.font='600 17px sans-serif';ctx.fillText(`9FOREST · ${spaceName()} 공간 배치`,25,34);const url=c.toDataURL('image/png');$('#export-image').src=url;$('#export-download').href=url;$('#export-download').download=`9forest_${spaceId}_layout.png`;$('#export-modal').hidden=false;});
 $('#close-modal').addEventListener('click',()=>$('#export-modal').hidden=true);$('#export-modal').addEventListener('click',e=>{if(e.target.id==='export-modal')e.target.hidden=true;});document.addEventListener('keydown',e=>{if(e.key==='Escape')$('#export-modal').hidden=true;});
 for(const b of $$('[data-view]'))b.addEventListener('click',()=>setView(b.dataset.view));for(const id of ['roof','structure','equipment','walls'])$('#'+id).addEventListener('change',updateRoom);
@@ -421,4 +506,4 @@ $('#zoom-out').addEventListener('click',()=>{if(camera.isOrthographicCamera){cam
 let initialSpace='nightshift';try{const q=new URL(location.href).searchParams.get('space'),saved=localStorage.getItem('9forest_active_space_v1');initialSpace=Object.hasOwn(spaces,q)?q:Object.hasOwn(spaces,saved)?saved:initialSpace;}catch{}
 setSpace(initialSpace,{initial:true});$('#status').hidden=true;
 let lastFrame=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,Math.max(0,(now-lastFrame)/1000));lastFrame=now;if(walkState)advanceWalk(dt,now);else controls.update();projectorRig.tick(now);indirectRig.tick();daylightRig.tick();renderer.render(scene,camera);}animate(lastFrame);
-window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>loadItems([]),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),daylight:()=>daylightRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};
+window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>{loadItems([]);loadDucts([]);},addDuct:(params)=>addDuct(params),ducts:()=>ducts.map(d=>({...serializeDuct(d),totals:d.plan.totals,conflicts:ductConflicts(d).map(it=>it.type)})),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),daylight:()=>daylightRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};

@@ -2,11 +2,17 @@
 
 [Open the 9FOREST viewer](https://choiboryeon.github.io/9forest_viewer/9forest_viewer.html)
 
-상단 **공간** 메뉴에서 **Night Shift / WESS+ / 공간 힘 · 지하**를 선택할 수 있습니다. Night Shift와 WESS+는 기존 20개 사물 라이브러리를 공유하고, 공간 힘은 공연 기자재만 표시합니다.
+상단 **공간** 메뉴에서 **Night Shift / WESS+ / 공간 힘 · 지하 / Sunken · 고천장**을 선택할 수 있습니다. Night Shift, WESS+, Sunken은 기존 20개 사물 라이브러리를 공유하고, 공간 힘은 공연 기자재만 표시합니다.
 
 [WESS+ 바로 열기](https://choiboryeon.github.io/9forest_viewer/9forest_viewer.html?space=wess)
 
 [공간 힘 바로 열기](https://choiboryeon.github.io/9forest_viewer/9forest_viewer.html?space=spacehim)
+
+[Sunken 바로 열기](https://choiboryeon.github.io/9forest_viewer/9forest_viewer.html?space=sunken)
+
+**Sunken**은 `[virtual] sunken`의 nineforests v5 모델(성수동 공장 리모델링형 고천장 홀)입니다. 벽 안쪽 16 × 13 m, 트러스 하현재 7.2 m, 용마루 천창 약 10 m이며 적벽돌·하부 흰 도장, 철제 격자창, 북측 캣워크와 계단, 천장 크레인, 리깅 파이프 그리드, 남동쪽 라이브 스테이지를 포함합니다. 행잉 사물은 리깅 그리드 **5.7 m**까지 매답니다. 캣워크 계단·필라스터·스테이지는 배치에서 피하고, 캣워크 데크(3.0 m 이상) 아래에는 바닥 사물만 놓을 수 있습니다. v2 아홉 작품과 거치대, 음향 케이블, 대기 헤이즈는 웹에서 제외했습니다. 조명은 천창 방향의 햇빛과 그리드 프로파일 스팟을 근사한 미리보기입니다. [Sunken 변환 기록](docs/sunken-space.md)
+
+Sunken에서는 사물과 함께 **덕트 설치**를 배치할 수 있습니다. 왼쪽 목록 맨 위의 **덕트 설치 · 추가**를 누르면, 덕트 시뮬레이터(`duct-simulator.html`)의 생성 규칙으로 폭·깊이·높이 영역 안에 스파이럴·플렉시블 덕트를 랜덤 생성합니다. 시드, 복잡도, 덕트 종류, 설치 방식(바닥·벽면·천장·혼합), 개수, 직경, 지지대, 좌대를 오른쪽 패널에서 바꾸고, 영역을 드래그하거나 좌표·회전으로 옮깁니다. **생성할 때 배치된 사물 피하기**를 켜면 영역 안의 사물을 피해서 경로를 만들고, 나중에 사물을 옮겨 덕트와 겹치면 양쪽 패널에 경고를 표시합니다. 영역을 옮겨도 경로는 유지되며 **새로 생성**이나 **사물 피해 다시 생성**을 눌러야 다시 만듭니다. 덕트 설정은 Sunken 배치 JSON의 `ducts`에 저장되고, 같은 시드와 값이면 같은 형태가 다시 생성됩니다. 덕트 하나는 GLB로 내보낼 수 있습니다. [덕트 결합 방식](docs/sunken-space.md)
 
 Night Shift는 D벽 반투명 창에서 퍼지는 차가운 확산광과 사진에 보이는 천장 일자 LED 6구간을 따로 표현합니다. LED 아래의 넓은 밝기 변화와 배치 사물의 부드러운 그림자를 반영했으며, 다른 두 공간의 조명에는 영향을 주지 않습니다.
 
@@ -51,6 +57,8 @@ npm run serve
 로컬 주소는 `http://127.0.0.1:4186/9forest_viewer.html`입니다. `src/`는 편집 가능한 원본, `data/`는 세 공간과 사물·기자재 데이터입니다. `tools/build.mjs`가 Three.js, 공간 모델, 사진을 하나의 `9forest_viewer.html`에 포함하므로 배포 후 CDN이나 모델 서버가 필요 없습니다. 기존 `index.html` 진입 경로와 단일 HTML 다운로드 방식도 유지됩니다.
 
 WESS 원본 수정 시 `node tools/convert-wess.mjs`를 실행한 뒤 다시 빌드하세요. 변환은 5,588개 원본 삼각형의 좌표와 면 방향을 보존하는지 검사합니다. `data/wess-source/README.md`와 `data/wess-geometry-audit.json`에 출처, 치수와 가정을 기록했습니다.
+
+Sunken 원본은 `[virtual] sunken/modeling/nineforests_stage_v5.blend`입니다. `tools/blender/export_sunken.py`로 `data/sunken-source/sunken_v5_export.json`을 만든 뒤 `node tools/convert-sunken.mjs`를 실행하세요. 벽을 A/B/C/D면으로 나누고 삼각형 수가 그대로인지 검사해 `data/sunken-geometry-audit.json`에 남깁니다.
 
 공간 힘 원본은 `data/spacehim-source/`에 보관했습니다. `node tools/convert-spacehim.mjs`로 OBJ를 다시 변환할 수 있습니다. X·Y를 함께 회전해 원래 Blender 좌표 `(u,-v,Z)`로 복원한 167개 부재를 공간 모델로 저장합니다. 원본 삼각형이 모두 보존되는지 검사한 결과는 `data/spacehim-geometry-audit.json`에 남깁니다. `node tools/review-spacehim.mjs`는 검토 평면 SVG를 만듭니다. 바닥 배치 영역은 원본 `model_notes.json`과 도면을 바탕으로 보수적으로 구획했습니다. 공간 힘의 현재 JSON 형식은 레일 조명과 프로젝터 화면을 포함한 version 7입니다. 이전 version 4 배치의 좌표는 자동 이전되며, version 4/5 파일에는 기본 레일 조명을 추가합니다. 프로젝터 화면 설정이 없는 기존 파일은 흰 화면으로 시작합니다.
 

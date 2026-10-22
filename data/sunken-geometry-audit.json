@@ -1,0 +1,33 @@
+{
+  "source_file": "nineforests_stage_v5.blend",
+  "source_sha256": "61492ba121567f3d12119f9891031c64ac9b014e9ec82767d94d9de5d37441da",
+  "export_sha256": "dc0f7edd88229700d5c8b92d0faa2eb3457ebc676f85da2576b11b3a4c2afcaf",
+  "blender": "4.5.1 LTS",
+  "source_meshes": 63,
+  "exported_meshes": 86,
+  "source_triangles": 121128,
+  "exported_triangles": 121128,
+  "exact_triangle_count": true,
+  "groups": {
+    "floor": 4,
+    "wall": 16,
+    "opening": 4,
+    "roof": 3,
+    "structure": 5,
+    "equipment": 54
+  },
+  "walls": {
+    "A": 8,
+    "B": 9,
+    "C": 10,
+    "D": 7
+  },
+  "obstacles": 29,
+  "hall_m": [
+    16,
+    13
+  ],
+  "hang_reference_m": 5.7,
+  "paint_line_z": 3.015,
+  "curve_resolution": 4
+}

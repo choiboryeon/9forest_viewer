@@ -4,7 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read=name=>JSON.parse(fs.readFileSync(path.join(root,'data',name),'utf8'));
-const spaces={nightshift:read('nightshift-room.json'),wess:read('wess-room.json'),spacehim:read('spacehim-room.json')};
+const spaces={nightshift:read('nightshift-room.json'),wess:read('wess-room.json'),spacehim:read('spacehim-room.json'),sunken:read('sunken-room.json')};
 const objects=read('objects.json'),equipment=read('equipment.json');
 const k8=JSON.parse(fs.readFileSync(path.join(root,'assets/equipment/qsc-k8/qsc-k8.json'),'utf8'));
 Object.assign(equipment.find(o=>o.id==='K8'),{meshes:k8.meshes,source:k8.source});
