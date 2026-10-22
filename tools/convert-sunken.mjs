@@ -55,7 +55,21 @@ function describe(m){
  return {...base,group:'equipment'};
 }
 const prepared=source.meshes.flatMap(m=>WALL_PARTS.test(m.name)?split(m):[m]);
-const meshes=prepared.map(describe).filter(m=>m.faces.length).map(m=>({...m,bounds:boundsOf(m.vertices)}));
+const described=prepared.map(describe).filter(m=>m.faces.length).map(m=>({...m,bounds:boundsOf(m.vertices)}));
+
+// The v5 live-performance station (desk, monitors, cases, rug, cables) is not part of
+// the building: it is stored relative to its own pivot so the viewer can move,
+// rotate or remove it. The profile spots on the truss bar stay with the rigging.
+const STATION=/^(v5_stage_(?!light_bar|profile)|v5_patch_)/,STATION_SOLID=/^v5_stage_(alu|black|tolex|ply|cone|panel|knob)$/;
+const meshes=described.filter(m=>!STATION.test(m.name)),stationMeshes=described.filter(m=>STATION.test(m.name));
+const solid=boundsOf(stationMeshes.filter(m=>STATION_SOLID.test(m.name)).flatMap(m=>m.vertices));
+const pivot=[0,1].map(i=>Math.round((solid.min[i]+solid.max[i])/2*1000)/1000);
+const station={id:'live-station',title:'연주 스테이션',pivot,
+ footprint:[solid.min[0]-pivot[0],solid.min[1]-pivot[1],solid.max[0]-pivot[0],solid.max[1]-pivot[1]].map(v=>Math.round(v*1000)/1000),height:Math.round(solid.max[2]*1000)/1000,
+ note:'데스크톱 라이브 셋업(v5 V5_STAGE_SETUP). 원래 위치는 남동쪽 코너입니다.',
+// cable_07 runs to the south-wall outlet and cable_08 to the amp shelf; both only
+ // make sense at the original spot, so the viewer hides them once the station moves.
+ meshes:stationMeshes.map(m=>{const v=m.vertices.slice();for(let i=0;i<v.length;i+=3){v[i]=Math.round((v[i]-pivot[0])*10000)/10000;v[i+1]=Math.round((v[i+1]-pivot[1])*10000)/10000;}const {bounds,...rest}=m;return {...rest,vertices:v,...(/cable_0[78]$/.test(m.name)?{tether:true}:{})};})};
 
 // Placement obstacles: connected parts that stand on the floor or hang low enough
 // to meet an object. Touching parts are merged so drag fitting stays fast.
@@ -66,7 +80,7 @@ function components(m){
  for(let i=0;i<parent.length;i++){const r=find(i),b=boxes.get(r)||{min:[Infinity,Infinity,Infinity],max:[-Infinity,-Infinity,-Infinity]};for(let j=0;j<3;j++){b.min[j]=Math.min(b.min[j],m.vertices[i*3+j]);b.max[j]=Math.max(b.max[j],m.vertices[i*3+j]);}boxes.set(r,b);}
  return [...boxes.values()];
 }
-const OBSTACLE_SOURCES=/^(v4_concrete_pilasters|v4_north_catwalk|v4_catwalk_grating|v5_downpipes|v5_extinguishers|v5_switchboard|v5_stage_(alu|black|tolex|ply|cone|panel|knob))/;
+const OBSTACLE_SOURCES=/^(v4_concrete_pilasters|v4_north_catwalk|v4_catwalk_grating|v5_downpipes|v5_extinguishers|v5_switchboard)/;
 let boxes=source.meshes.filter(m=>OBSTACLE_SOURCES.test(m.name)).flatMap(components)
  .filter(b=>(b.max[0]-b.min[0])*(b.max[1]-b.min[1])>.0004)
  .map(b=>({bounds:[Math.max(X0,b.min[0]),Math.max(Y0,b.min[1]),Math.min(X1,b.max[0]),Math.min(Y1,b.max[1])],minZ:Math.max(0,b.min[2]),maxZ:b.max[2]}));
@@ -96,10 +110,10 @@ const room={
   assumptions:['실측 건물이 아닌 콘셉트 공간(nineforests v5)이며 구조 계산을 거친 시공 설계가 아닙니다.','v2 아홉 작품, 거치대, 음향 케이블과 대기 헤이즈는 웹 뷰어에서 제외했습니다.','행잉 높이는 리깅 그리드 5.7 m 기준으로 계산합니다.']},
  cameras:{'3d':{position:[22,-24,17],target:[4,-2.5,2.4]},A:{position:[4,-6.5,1.65],target:[4,4,2.8]},B:{position:[-1,-2.5,1.65],target:[12,-2.5,2.8]},C:{position:[4,1.5,1.65],target:[4,-9,2.8]},D:{position:[9,-2.5,1.65],target:[-4,-2.5,2.8]}},
  viewLabels:{A:'A면 · 북측 캣워크',B:'B면 · 동측 크레인',C:'C면 · 남측 출입문',D:'D면 · 서측 박공창'},
- meshes,
+ meshes,station,
 };
 
-const sourceTriangles=source.meshes.reduce((n,m)=>n+m.faces.length/3,0),exportedTriangles=meshes.reduce((n,m)=>n+m.faces.length/3,0);
+const sourceTriangles=source.meshes.reduce((n,m)=>n+m.faces.length/3,0),exportedTriangles=[...meshes,...station.meshes].reduce((n,m)=>n+m.faces.length/3,0);
 assert.equal(exportedTriangles,sourceTriangles,'Splitting walls must keep every triangle');
 assert(meshes.every(m=>m.vertices.every(Number.isFinite)&&m.faces.every(i=>i>=0&&i<m.vertices.length/3)));
 assert(obstacles.length<=60,`Too many obstacles for interactive fitting: ${obstacles.length}`);
@@ -107,7 +121,8 @@ const audit={source_file:source.source_file,source_sha256:source.source_sha256,e
  source_meshes:source.meshes.length,exported_meshes:meshes.length,source_triangles:sourceTriangles,exported_triangles:exportedTriangles,exact_triangle_count:true,
  groups:Object.fromEntries(['floor','wall','opening','roof','structure','equipment'].map(g=>[g,meshes.filter(m=>m.group===g).length])),
  walls:Object.fromEntries(['A','B','C','D'].map(w=>[w,meshes.filter(m=>m.wall===w).length])),
+ station:{meshes:station.meshes.length,triangles:station.meshes.reduce((n,m)=>n+m.faces.length/3,0),pivot,footprint:station.footprint},
  obstacles:obstacles.length,hall_m:[X1-X0,Y1-Y0],hang_reference_m:room.metadata.ceiling_m,paint_line_z:source.paint_line_z,curve_resolution:source.curve_resolution};
 fs.writeFileSync(path.join(root,'data/sunken-room.json'),JSON.stringify(room));
 fs.writeFileSync(path.join(root,'data/sunken-geometry-audit.json'),JSON.stringify(audit,null,2)+'\n');
-console.log(`Sunken: ${meshes.length} meshes, ${exportedTriangles} triangles, ${obstacles.length} obstacles`);
+console.log(`Sunken: ${meshes.length} meshes + station ${station.meshes.length}, ${exportedTriangles} triangles, ${obstacles.length} obstacles`);

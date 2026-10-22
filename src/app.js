@@ -20,11 +20,14 @@ const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const input=JSON.parse($('#layout-data').textContent), spaces=input.spaces;
 let library=input.objects,byId=new Map(library.map(o=>[o.id,o]));
 let spaceId='nightshift',room=spaces.nightshift,meta=room.metadata,W,D,H,eave,ridgeY,bounds,cx,cy;
+const STATION_UID='station';
+let station=null,stationRoot=null;
 const isGear=()=>spaceId==='spacehim';
 const isSunken=()=>spaceId==='sunken';
 const hasDucts=()=>isSunken();
 const spaceName=()=>spaceId==='wess'?'WESS+':isGear()?'공간 힘':isSunken()?'Sunken':'Night Shift';
 function setRoomData(id){
+ station=null;
  spaceId=id;room=spaces[id];meta=room.metadata;W=meta.width_m;D=meta.depth_m;H=meta.ridge_m;eave=meta.eave_m;ridgeY=meta.ridge_y_m;
  bounds=meta.bounds||{min:[0,0],max:[W,D]};cx=(bounds.min[0]+bounds.max[0])/2;cy=(bounds.min[1]+bounds.max[1])/2;
  library=isGear()?input.equipment:input.objects;byId=new Map(library.map(o=>[o.id,o]));
@@ -130,6 +133,7 @@ function buildRoom(){
   // colour/depth-silent proxies on that layer to preserve cutaway occlusion.
   if((isGear()&&(part==='wall'||isStructure||isRoof))||(spaceId==='wess'&&!isWindowGlass&&!isFloor)){const shadowMaterial=spaceId==='wess'?mat.clone():mat;if(spaceId==='wess'){shadowMaterial.colorWrite=false;shadowMaterial.depthWrite=false;shadowMaterial.shadowSide=THREE.DoubleSide;}const shadow=new THREE.Mesh(g,shadowMaterial);shadow.layers.set(spaceId==='wess'?0:1);shadow.castShadow=true;shadow.userData={...mesh.userData,shadowOnly:spaceId==='wess'};roomShadows.add(shadow);}
  }
+ stationRoot=room.station?buildStation(room.station):null;
  const wess=spaceId==='wess',him=isGear();
  windowLight.position.set(...(him?[3,-1,2.45]:wess?[-.2,1.4,2.2]:[-.14,1.45,2.02]));windowLight.target.position.set(...(him?[6.3,-6,.3]:wess?[4.5,2,.2]:[2.55,1.65,.65]));windowLight.intensity=him?1.6:wess?15:5.5;windowLight.distance=him?12:wess?15:6.5;
  galleryLight.position.set(...(him?[7,-7,2.45]:wess?[8.5,1.8,2.55]:[3,4.05,2.46]));galleryLight.target.position.set(...(him?[6.4,-8.7,.4]:wess?[8.5,1.8,0]:[3,4.4,1.2]));galleryLight.intensity=him?8:wess?12:2.5;galleryLight.distance=him?14:wess?15:4.5;
@@ -269,9 +273,9 @@ function updateProjections(){
  if(spaceId==='wess')daylightRig.setDynamic(objectGroup,!!drag);
 }
 function drawItem(item){if(walkState)stopWalk();if(item.root){const oldFixture=item.root.children[0];oldFixture?.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});objectGroup.remove(item.root);}item.root=new THREE.Group();item.root.name=item.uid;item.root.userData.uid=item.uid;const {quaternion,size}=orientation(item),f=fixture(item,size),pivot=new THREE.Group(),model=modelFor(item.type);if(isGear())model.traverse(o=>{if(o.isMesh)o.castShadow=item.type!=='K8'||/K8_Moulded|K8_Dark_acoustic_cloth/.test(o.name);});model.position.z=-byId.get(item.type).dimensions_m.height/2;pivot.quaternion.copy(quaternion);pivot.position.z=f.bottom+size.height/2;pivot.add(model);item.model=pivot;item.root.add(f.group,pivot);item.root.position.set(item.x,item.y,floorAt(meta,item.x,item.y));objectGroup.add(item.root);if(selected===item.uid)updateSelectionBox();updateProjections();trackRig.invalidateShadows();}
-function updateSelectionBox(){if(walkState||settingsMode==='lighting'){if(selectionBox)selectionBox.visible=false;return;}const duct=selectedDuct(),it=items.find(x=>x.uid===selected)||(duct&&{root:duct.root,model:duct.root.children[0]});if(!it){if(selectionBox)selectionBox.visible=false;return;}it.root.updateMatrixWorld(true);if(!selectionBox){selectionBox=new THREE.BoxHelper(it.model,0xa45b37);selectionBox.material.transparent=true;selectionBox.material.opacity=.62;selectionBox.material.depthTest=false;selectionBox.renderOrder=50;scene.add(selectionBox);}else{selectionBox.visible=true;selectionBox.setFromObject(it.model);}}
+function updateSelectionBox(){if(walkState||settingsMode==='lighting'){if(selectionBox)selectionBox.visible=false;return;}const duct=selectedDuct(),it=items.find(x=>x.uid===selected)||(duct&&{root:duct.root,model:duct.root.children[0]})||(selected===STATION_UID&&station?.enabled&&stationRoot&&{root:stationRoot,model:stationRoot});if(!it){if(selectionBox)selectionBox.visible=false;return;}it.root.updateMatrixWorld(true);if(!selectionBox){selectionBox=new THREE.BoxHelper(it.model,0xa45b37);selectionBox.material.transparent=true;selectionBox.material.opacity=.62;selectionBox.material.depthTest=false;selectionBox.renderOrder=50;scene.add(selectionBox);}else{selectionBox.visible=true;selectionBox.setFromObject(it.model);}}
 function syncItem(item){if(walkState)stopWalk();if(!normalize(item)){toast(isGear()?"기자재가 공간에 들어가지 않습니다":"사물이 공간에 들어가지 않습니다");return;}drawItem(item);if(selected===item.uid){renderInspector();renderPlaced();}persist();}
-function serializeLayout(){return {title:`9FOREST · ${spaceName()} 공간 배치`,version:isGear()?7:4,space_id:spaceId,...(isGear()?{lighting:trackRig.toJSON()}:spaceId==='wess'?{daylight:daylightRig.toJSON()}:{}),room_m:{width:W,depth:D,height:H},...(hasDucts()?{ducts:ducts.map(serializeDuct)}:{}),items:items.map(({uid,type,mode,x,y,height,rotation,tiltX,tiltY})=>({type,mode,x,y,height,rotation,tiltX,tiltY,...(type==='PROJECTOR'?{projection:projectorRig.settings(uid)}:{})}))};}
+function serializeLayout(){return {title:`9FOREST · ${spaceName()} 공간 배치`,version:isGear()?7:4,space_id:spaceId,...(isGear()?{lighting:trackRig.toJSON()}:spaceId==='wess'?{daylight:daylightRig.toJSON()}:{}),room_m:{width:W,depth:D,height:H},...(hasDucts()?{ducts:ducts.map(serializeDuct)}:{}),...(station?{station:{enabled:station.enabled,x:round(station.x),y:round(station.y),rotation:round(station.rotation)}}:{}),items:items.map(({uid,type,mode,x,y,height,rotation,tiltX,tiltY})=>({type,mode,x,y,height,rotation,tiltX,tiltY,...(type==='PROJECTOR'?{projection:projectorRig.settings(uid)}:{})}))};}
 function persist(){const layout=serializeLayout();memoryLayouts.set(spaceId,layout);try{localStorage.setItem(storageKey(),JSON.stringify(layout));localStorage.setItem('9forest_active_space_v1',spaceId);}catch{}}
 function recommended(type){return (isGear()?GEAR_RECS:RECS)[type]||['floor',''];}
 function defaultPosition(index,type){if(isGear()){const count=items.filter(i=>i.type===type).length;return type==='K8'?(count%2?[9,-8.6]:[3.5,-8.6]):type==='PROJECTOR'?[6.25,-9.45]:[10.2,-6.3];}const spots=isSunken()?[[1,-1],[3,-1],[5,-1],[7,-1],[1,-2.5],[3,-2.5],[5,-2.5],[7,-2.5],[1,-4],[3,-4],[5,-4],[7,-4]]:spaceId==='wess'?[[1.6,1],[3.4,1],[5.4,1],[7,1.3],[1.6,3.4],[3.4,3.5],[5.9,3.5],[9.5,2.8],[13.3,3.6]]:[[1.05,1.06],[2.55,1.03],[4.2,1.05],[1.15,3.08],[2.7,3.05],[4.3,3.05],[1.8,2],[3.75,2]];return spots[index%spots.length];}
@@ -279,11 +283,12 @@ function addItem(type,from=null){if(walkState)stopWalk();const o=byId.get(type);
 function removeItem(uid){if(walkState)stopWalk();const i=items.findIndex(x=>x.uid===uid);if(i<0)return;items[i].root.children[0]?.traverse(o=>{o.geometry?.dispose();o.material?.dispose();});objectGroup.remove(items[i].root);items.splice(i,1);trackRig.invalidateShadows();updateProjections();selected=null;updateSelectionBox();renderPlaced();renderInspector();persist();toast('배치에서 제거했습니다');}
 function select(uid){selected=uid;if(isGear())setSettingsMode('gear');for(const d of ducts)highlightDuct(d);updateSelectionBox();renderPlaced();renderInspector();}
 function selectedItem(){return items.find(x=>x.uid===selected);}
-function renderPlaced(){const el=$('#placed-list');$('#placed-count').textContent=items.length+ducts.length+(isGear()?'개':'점');if(!items.length&&!ducts.length){el.innerHTML=`<p class="empty">왼쪽 아래에서 ${isGear()?'기자재':'사물'}를 추가하세요.</p>`;return;}el.innerHTML=items.map((it,i)=>`<button class="placed-row" data-uid="${esc(it.uid)}" aria-current="${selected===it.uid}"><span><strong>${esc(byId.get(it.type).title)}</strong><small>${esc(MODE[it.mode])} · ${round(it.x).toFixed(2)}, ${round(it.y).toFixed(2)} m</small></span><span class="idx">${String(i+1).padStart(2,'0')}</span></button>`).join('')+ducts.map((d,i)=>`<button class="placed-row" data-uid="${esc(d.uid)}" aria-current="${selected===d.uid}"><span><strong>덕트 설치 · ${d.seed}</strong><small>${esc(DUCT_MODE[d.plan?.sceneMode]||'')} · ${round(d.x).toFixed(2)}, ${round(d.y).toFixed(2)} m</small></span><span class="idx">D${i+1}</span></button>`).join('');for(const b of el.querySelectorAll('button'))b.addEventListener('click',()=>select(b.dataset.uid));}
-function renderCatalog(){const q=$('#search').value.trim().toLowerCase();const filtered=library.filter(o=>(o.title+o.id).toLowerCase().includes(q));$('#catalog').innerHTML=(hasDucts()&&'덕트 duct'.includes(q)?DUCT_CARD:'')+filtered.map(o=>`<div class="catalog-item">${o.photo?`<img src="${o.photo}" alt="">`:''}<div><strong>${esc(o.title)}</strong><small>${esc(o.id)} · ${esc(MODE[recommended(o.id)[0]])}</small></div><button data-add="${esc(o.id)}" aria-label="${esc(o.title)} 추가">추가</button></div>`).join('')||'<p class="empty">검색 결과가 없습니다.</p>';for(const b of $('#catalog').querySelectorAll('[data-add]'))b.addEventListener('click',()=>b.dataset.add==='DUCT'?addDuct():addItem(b.dataset.add));}
+function renderPlaced(){const el=$('#placed-list');$('#placed-count').textContent=items.length+ducts.length+(station?.enabled?1:0)+(isGear()?'개':'점');if(!items.length&&!ducts.length&&!station?.enabled){el.innerHTML=`<p class="empty">왼쪽 아래에서 ${isGear()?'기자재':'사물'}를 추가하세요.</p>`;return;}el.innerHTML=items.map((it,i)=>`<button class="placed-row" data-uid="${esc(it.uid)}" aria-current="${selected===it.uid}"><span><strong>${esc(byId.get(it.type).title)}</strong><small>${esc(MODE[it.mode])} · ${round(it.x).toFixed(2)}, ${round(it.y).toFixed(2)} m</small></span><span class="idx">${String(i+1).padStart(2,'0')}</span></button>`).join('')+(station?.enabled?`<button class="placed-row" data-uid="${STATION_UID}" aria-current="${selected===STATION_UID}"><span><strong>연주 스테이션</strong><small>방향 ${round(station.rotation)}° · ${round(station.x).toFixed(2)}, ${round(station.y).toFixed(2)} m</small></span><span class="idx">S</span></button>`:'')+ducts.map((d,i)=>`<button class="placed-row" data-uid="${esc(d.uid)}" aria-current="${selected===d.uid}"><span><strong>덕트 설치 · ${d.seed}</strong><small>${esc(DUCT_MODE[d.plan?.sceneMode]||'')} · ${round(d.x).toFixed(2)}, ${round(d.y).toFixed(2)} m</small></span><span class="idx">D${i+1}</span></button>`).join('');for(const b of el.querySelectorAll('button'))b.addEventListener('click',()=>select(b.dataset.uid));}
+function renderCatalog(){const q=$('#search').value.trim().toLowerCase();const filtered=library.filter(o=>(o.title+o.id).toLowerCase().includes(q));$('#catalog').innerHTML=(station&&!station.enabled&&'연주 스테이션 station'.includes(q)?STATION_CARD:'')+(hasDucts()&&'덕트 duct'.includes(q)?DUCT_CARD:'')+filtered.map(o=>`<div class="catalog-item">${o.photo?`<img src="${o.photo}" alt="">`:''}<div><strong>${esc(o.title)}</strong><small>${esc(o.id)} · ${esc(MODE[recommended(o.id)[0]])}</small></div><button data-add="${esc(o.id)}" aria-label="${esc(o.title)} 추가">추가</button></div>`).join('')||'<p class="empty">검색 결과가 없습니다.</p>';for(const b of $('#catalog').querySelectorAll('[data-add]'))b.addEventListener('click',()=>b.dataset.add==='DUCT'?addDuct():b.dataset.add==='STATION'?setStationEnabled(true):addItem(b.dataset.add));}
 function occupied(item){const a=foot(item);return items.filter(other=>other!==item).some(other=>{const b=foot(other);return Math.abs(item.x-other.x)<a.hx+b.hx-.03&&Math.abs(item.y-other.y)<a.hy+b.hy-.03;});}
 function renderInspector(){
  if(isGear()){renderGearInspector();return;}
+ if(selected===STATION_UID&&station?.enabled){renderStationInspector();return;}
  const duct=selectedDuct();if(duct){renderDuctInspector(duct);return;}
  const el=$('#inspector'),it=selectedItem();
  if(!it){el.innerHTML='<div class="right-empty"><h3>사물을 선택하세요</h3><ol><li>왼쪽 목록에서 사물을 추가합니다.</li><li>공간 안에서 끌어 위치를 바꿉니다.</li><li>거치 방식과 회전 방향을 설정합니다.</li></ol><p class="mini-note">마지막 배치는 이 브라우저에 자동 저장됩니다. 다른 컴퓨터로 옮길 때는 상단의 배치 저장을 사용하세요.</p></div>';return;}
@@ -410,6 +415,69 @@ ${conflicts.length?`<p class="micro" style="color:#a15e3f">덕트와 겹치는 �
  $('#duct-reroute').addEventListener('click',()=>{d.avoid=true;syncDuct(d);toast(ductConflicts(d).length?'일부 사물은 피하지 못했습니다':'사물을 피해 다시 생성했습니다');});
  $('#duct-dup').addEventListener('click',()=>addDuct({...serializeDuct(d),x:d.x+.5,y:d.y-.5}));$('#duct-glb').addEventListener('click',()=>exportDuctGLB(d));$('#duct-remove').addEventListener('click',()=>removeDuct(d.uid));
 }
+// Live-performance station (Sunken v5 desk setup): stored apart from the hall so it
+// can be moved, rotated or removed like a placed piece. Its footprint becomes a
+// placement/walk obstacle only while it is in the space.
+function buildStation(s){
+ const root=new THREE.Group();root.name=STATION_UID;root.userData.uid=STATION_UID;
+ for(const m of s.meshes){
+  let g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(m.vertices,3));g.setIndex(m.faces);const indexed=g;g=g.toNonIndexed();indexed.dispose();g.computeVertexNormals();
+  const mesh=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:m.color||'#777',metalness:.35,roughness:.62,side:THREE.DoubleSide,emissive:m.emissive||'#000000',emissiveIntensity:m.emissive?1.3:0}));
+  mesh.name=m.name;mesh.castShadow=!/rug|sticker|patch/.test(m.name);mesh.receiveShadow=true;mesh.userData.tether=!!m.tether;root.add(mesh);
+ }
+ roomGroup.add(root);return root;
+}
+function stationDefault(){return {enabled:true,x:room.station.pivot[0],y:room.station.pivot[1],rotation:0};}
+function stationExtent(st){const [x0,y0,x1,y1]=room.station.footprint,a=st.rotation*Math.PI/180,c=Math.abs(Math.cos(a)),s=Math.abs(Math.sin(a)),w=x1-x0,d=y1-y0;return {hx:(w*c+d*s)/2,hy:(w*s+d*c)/2};}
+function stationAtOrigin(){const p=room.station.pivot;return Math.hypot(station.x-p[0],station.y-p[1])<.02&&station.rotation%360===0;}
+// The station only collides with the building; objects and ducts move out of its way.
+// Its bounding box grazes the south pilaster at the modelled spot, which is always allowed.
+function fitStation(x,y){const p=room.station.pivot;if(Math.hypot(x-p[0],y-p[1])<.02&&station.rotation%360===0)return {x:p[0],y:p[1]};const {hx,hy}=stationExtent(station);return fitPlacement(room.metadata,x,y,hx,hy,{bottom:0,top:room.station.height});}
+function stationMeta(){
+ if(!station?.enabled)return room.metadata;
+ const {hx,hy}=stationExtent(station);
+ return {...room.metadata,obstacles:[...room.metadata.obstacles,{id:'live-station',kind:'station',bounds:[station.x-hx,station.y-hy,station.x+hx,station.y+hy],minZ:0,maxZ:room.station.height}]};
+}
+function placeStation(){
+ if(!stationRoot)return;stationRoot.visible=!!station?.enabled;if(!station)return;
+ stationRoot.position.set(station.x,station.y,floorAt(room.metadata,station.x,station.y));stationRoot.rotation.z=station.rotation*Math.PI/180;
+ const home=stationAtOrigin();for(const m of stationRoot.children)if(m.userData.tether)m.visible=home;
+ sunkenRig.setStation(station);
+}
+function loadStation(raw){
+ if(!room.station){station=null;return;}
+ station=stationDefault();
+ if(raw&&typeof raw==='object'){station.enabled=raw.enabled!==false;for(const k of ['x','y','rotation'])if(Number.isFinite(+raw[k]))station[k]=+raw[k];}
+ station.rotation=((station.rotation%360)+360)%360;
+ const fit=fitStation(station.x,station.y);if(fit){station.x=fit.x;station.y=fit.y;}else Object.assign(station,stationDefault(),{enabled:station.enabled});
+ meta=stationMeta();placeStation();
+}
+function validateStation(s){if(typeof s!=='object'||!s||['x','y','rotation'].some(k=>s[k]!=null&&!Number.isFinite(Number(s[k]))))throw Error('연주 스테이션 정보를 확인해 주세요.');}
+function moveStation(x,y){const fit=fitStation(x,y);if(!fit)return;station.x=fit.x;station.y=fit.y;placeStation();updateSelectionBox();const ix=$('#station-x'),iy=$('#station-y');if(ix)ix.value=station.x.toFixed(2);if(iy)iy.value=station.y.toFixed(2);}
+// Re-apply the station obstacle and push placed objects/duct regions out of it.
+function commitStation(){
+ meta=stationMeta();placeStation();
+ for(const it of items)if(normalize(it))drawItem(it);
+ for(const d of ducts)if(normalizeDuct(d))drawDuct(d,false);
+ updateSelectionBox();renderPlaced();renderInspector();renderCatalog();persist();
+}
+function setStationEnabled(enabled){
+ if(!station)return;station.enabled=enabled;
+ if(enabled){const fit=fitStation(station.x,station.y)||(Object.assign(station,stationDefault()),fitStation(station.x,station.y));if(fit){station.x=fit.x;station.y=fit.y;}selected=STATION_UID;toast('연주 스테이션을 다시 놓았습니다');}
+ else{if(selected===STATION_UID)selected=null;toast('연주 스테이션을 공간에서 뺐습니다');}
+ commitStation();
+}
+const STATION_CARD='<div class="catalog-item"><svg class="duct-icon" viewBox="0 0 38 38" aria-hidden="true"><rect x="5" y="15" width="28" height="5" fill="currentColor"/><rect x="8" y="20" width="4" height="13" fill="currentColor"/><rect x="26" y="20" width="4" height="13" fill="currentColor"/><rect x="13" y="7" width="12" height="8" fill="none" stroke="currentColor" stroke-width="2"/></svg><div><strong>연주 스테이션</strong><small>STATION · 다시 놓기</small></div><button data-add="STATION" aria-label="연주 스테이션 다시 놓기">추가</button></div>';
+function renderStationInspector(){
+ const el=$('#inspector'),[x0,y0,x1,y1]=room.station.footprint;
+ el.innerHTML=`<div class="inspector"><div class="object-title"><h3>연주 스테이션</h3><span class="badge">STATION</span></div><p class="micro">데스크, 노트북·컨트롤러, 모니터 스피커, 랙·플라이트 케이스, 러그와 케이블로 된 v5 라이브 셋업입니다. 끌어서 옮기거나 회전하고, 필요 없으면 공간에서 뺄 수 있습니다.</p><div class="rule"></div><div class="rotation-head"><span class="control-label">방향 (°)</span><button id="station-reset-rotation">초기화</button></div><div class="axis-row"><label for="station-rotation">수평 Z</label><input id="station-rotation-range" type="range" min="0" max="360" step="15" value="${round(station.rotation)}" aria-label="스테이션 방향"><input id="station-rotation" type="number" min="0" max="360" step="1" value="${round(station.rotation)}" aria-label="스테이션 방향 각도"></div><div class="rule"></div><div class="coord-grid"><div class="field"><label for="station-x">좌우 X (m)</label><input id="station-x" type="number" step="0.05" value="${round(station.x).toFixed(2)}"></div><div class="field"><label for="station-y">앞뒤 Y (m)</label><input id="station-y" type="number" step="0.05" value="${round(station.y).toFixed(2)}"></div></div><div class="row-actions"><button id="station-home">원래 위치로</button><button id="station-remove" class="danger">공간에서 빼기</button></div><p class="mini-note">점유 범위 ${(x1-x0).toFixed(2)} × ${(y1-y0).toFixed(2)} m · 높이 ${room.station.height.toFixed(2)} m. 놓을 때 겹친 사물과 덕트 영역은 밀려납니다. 원래 위치를 벗어나면 벽 콘센트·앰프 선반으로 가던 케이블 2가닥은 숨기고, 트러스의 스테이지 스폿은 스테이션을 따라 비춥니다.</p></div>`;
+ const turn=(v,commit)=>{station.rotation=((Number(v)%360)+360)%360;moveStation(station.x,station.y);$('#station-rotation').value=round(station.rotation);$('#station-rotation-range').value=round(station.rotation);if(commit)commitStation();};
+ $('#station-rotation-range').addEventListener('input',e=>turn(e.target.value,false));$('#station-rotation-range').addEventListener('change',e=>turn(e.target.value,true));
+ $('#station-rotation').addEventListener('change',e=>turn(e.target.value,true));$('#station-reset-rotation').addEventListener('click',()=>turn(0,true));
+ for(const k of ['x','y'])$('#station-'+k).addEventListener('change',e=>{const v=Number(e.target.value);if(Number.isFinite(v)){moveStation(k==='x'?v:station.x,k==='y'?v:station.y);commitStation();}});
+ $('#station-home').addEventListener('click',()=>{Object.assign(station,stationDefault());commitStation();});
+ $('#station-remove').addEventListener('click',()=>setStationEnabled(false));
+}
 function moveSelected(it,x,y){it.x=x;it.y=y;normalize(it);drawItem(it);const ix=$('#pos-x'),iy=$('#pos-y');if(ix)ix.value=it.x.toFixed(2);if(iy)iy.value=it.y.toFixed(2);const warning=$('#collision-note');if(warning)warning.hidden=!occupied(it);const ductNote=$('#duct-note');if(ductNote)ductNote.hidden=!ductHit(it);}
 const caster=new THREE.Raycaster(),mouse=new THREE.Vector2(),floorPlane=new THREE.Plane(new THREE.Vector3(0,0,1),0),lightPlane=new THREE.Plane(new THREE.Vector3(0,0,1),-2.58),hitPoint=new THREE.Vector3();
 function pointer(e){const r=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);caster.setFromCamera(mouse,camera);}
@@ -418,13 +486,13 @@ function moveWalkPointer(e){const state=walkState,p=state?.pointer;if(!p||e.poin
 function endWalkPointer(e){const state=walkState,p=state?.pointer;if(!p||e.pointerId!==p.id)return false;state.pointer=null;if(state.peek?.dragging){state.peek.dragging=false;state.peek.origin=state.peek.quaternion.clone();state.peek.releasedAt=performance.now();}return true;}
 renderer.domElement.addEventListener('pointerdown',e=>{
  if(walkState){beginWalkPointer(e);return;}if(e.button!==0)return;pointer(e);
- const hit=caster.intersectObjects([...items.map(i=>i.root),...ducts.map(d=>d.root),...trackRig.pickables],true)[0];if(!hit)return;
+ const hit=caster.intersectObjects([...items.map(i=>i.root),...ducts.map(d=>d.root),...(station?.enabled&&stationRoot?[stationRoot]:[]),...trackRig.pickables],true)[0];if(!hit)return;
  let node=hit.object;while(node.parent&&!node.userData.lampId&&!node.userData.uid)node=node.parent;
  if(node.userData.lampId){
   const id=node.userData.lampId;trackRig.select(id);setSettingsMode('lighting');
   if(caster.ray.intersectPlane(lightPlane,hitPoint)){const l=trackRig.selectedLamp,p=railPoint(l.rail,l.t);drag={lampId:id,dx:p[0]-hitPoint.x,dy:p[1]-hitPoint.y,pointer:e.pointerId};}
  }else{
-  const it=items.find(x=>x.uid===node.userData.uid)||ducts.find(x=>x.uid===node.userData.uid);if(!it)return;select(it.uid);
+  const it=items.find(x=>x.uid===node.userData.uid)||ducts.find(x=>x.uid===node.userData.uid)||(node.userData.uid===STATION_UID&&{uid:STATION_UID,...station});if(!it)return;select(it.uid);
   if(caster.ray.intersectPlane(floorPlane,hitPoint))drag={uid:it.uid,dx:it.x-hitPoint.x,dy:it.y-hitPoint.y,pointer:e.pointerId};
  }
  if(drag){controls.enabled=false;renderer.domElement.setPointerCapture(e.pointerId);}
@@ -433,12 +501,12 @@ renderer.domElement.addEventListener('pointermove',e=>{
  if(walkState){moveWalkPointer(e);return;}if(!drag||e.pointerId!==drag.pointer)return;pointer(e);
  if(caster.ray.intersectPlane(drag.lampId?lightPlane:floorPlane,hitPoint)){
   if(drag.lampId){trackRig.move(drag.lampId,hitPoint.x+drag.dx,hitPoint.y+drag.dy);lightEditor.refreshPosition();}
-  else{const it=items.find(x=>x.uid===drag.uid),duct=ducts.find(x=>x.uid===drag.uid);if(it)moveSelected(it,hitPoint.x+drag.dx,hitPoint.y+drag.dy);if(duct)moveDuct(duct,hitPoint.x+drag.dx,hitPoint.y+drag.dy);}
+  else{const it=items.find(x=>x.uid===drag.uid),duct=ducts.find(x=>x.uid===drag.uid);if(it)moveSelected(it,hitPoint.x+drag.dx,hitPoint.y+drag.dy);if(duct)moveDuct(duct,hitPoint.x+drag.dx,hitPoint.y+drag.dy);if(drag.uid===STATION_UID)moveStation(hitPoint.x+drag.dx,hitPoint.y+drag.dy);}
  }
 });
-function stopDrag(){if(!drag)return;const {uid,lampId}=drag;drag=null;controls.enabled=true;renderPlaced();persist();if(lampId)lightEditor.render();else if(items.some(x=>x.uid===uid)||ducts.some(x=>x.uid===uid))renderInspector();}
+function stopDrag(){if(!drag)return;const {uid,lampId}=drag;drag=null;controls.enabled=true;renderPlaced();persist();if(lampId)lightEditor.render();else if(uid===STATION_UID)commitStation();else if(items.some(x=>x.uid===uid)||ducts.some(x=>x.uid===uid))renderInspector();}
 renderer.domElement.addEventListener('pointerup',e=>{if(!endWalkPointer(e))stopDrag();});renderer.domElement.addEventListener('pointercancel',e=>{if(!endWalkPointer(e))stopDrag();});renderer.domElement.addEventListener('lostpointercapture',e=>{if(!endWalkPointer(e))stopDrag();});
-renderer.domElement.addEventListener('keydown',e=>{if(walkState)return;const duct=selectedDuct();if(duct&&e.key.startsWith('Arrow')){e.preventDefault();const step=e.shiftKey?.10:.05;moveDuct(duct,duct.x+(e.key==='ArrowRight')*step-(e.key==='ArrowLeft')*step,duct.y+(e.key==='ArrowUp')*step-(e.key==='ArrowDown')*step);persist();renderPlaced();return;}const it=selectedItem();if(!it)return;const step=e.shiftKey?.10:.05;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();if(e.key==='ArrowLeft')it.x-=step;if(e.key==='ArrowRight')it.x+=step;if(e.key==='ArrowUp')it.y+=step;if(e.key==='ArrowDown')it.y-=step;syncItem(it);}});
+renderer.domElement.addEventListener('keydown',e=>{if(walkState)return;if(selected===STATION_UID&&station?.enabled&&e.key.startsWith('Arrow')){e.preventDefault();const step=e.shiftKey?.10:.05;moveStation(station.x+(e.key==='ArrowRight')*step-(e.key==='ArrowLeft')*step,station.y+(e.key==='ArrowUp')*step-(e.key==='ArrowDown')*step);commitStation();return;}const duct=selectedDuct();if(duct&&e.key.startsWith('Arrow')){e.preventDefault();const step=e.shiftKey?.10:.05;moveDuct(duct,duct.x+(e.key==='ArrowRight')*step-(e.key==='ArrowLeft')*step,duct.y+(e.key==='ArrowUp')*step-(e.key==='ArrowDown')*step);persist();renderPlaced();return;}const it=selectedItem();if(!it)return;const step=e.shiftKey?.10:.05;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();if(e.key==='ArrowLeft')it.x-=step;if(e.key==='ArrowRight')it.x+=step;if(e.key==='ArrowUp')it.y+=step;if(e.key==='ArrowDown')it.y-=step;syncItem(it);}});
 
 function download(content,name,mime){const blob=new Blob([content],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}
 function validateLayout(data){
@@ -447,7 +515,7 @@ function validateLayout(data){
  if(data.version!=null&&![2,3,4,5,6,7].includes(data.version))throw Error('지원하지 않는 배치 파일 버전입니다.');
  const validTypes=new Set((id==='spacehim'?input.equipment:input.objects).map(o=>o.id));
  for(const r of data.items){if(!r||!validTypes.has(r.type)||['x','y','height','rotation','tiltX','tiltY'].some(k=>r[k]!=null&&!Number.isFinite(Number(r[k]))))throw Error('배치 위치나 종류를 확인해 주세요.');if(r.type==='PROJECTOR')validateProjection(r.projection);}
- if(data.ducts!=null)validateDucts(data.ducts);
+ if(data.ducts!=null)validateDucts(data.ducts);if(data.station!=null)validateStation(data.station);
  if(id==='spacehim')validateLighting(data.lighting);if(id==='wess')validateDaylight(data.daylight);
  return id;
 }
@@ -455,6 +523,7 @@ function loadItems(raw){if(walkState)stopWalk();if(!Array.isArray(raw)||raw.leng
 const demo=[['R01','hang',1.25,1.02,1.65,0],['R03','rod',2.70,1.08,1.15,0],['R05','plinth',4.45,1.25,.18,0],['R04','floor',1.24,3.22,0,0],['R07','hang',3.13,3.18,1.8,0]];
 function restoreItems(){
  let stored=memoryLayouts.get(spaceId);try{stored??=JSON.parse(localStorage.getItem(storageKey())||(spaceId==='nightshift'?localStorage.getItem(LEGACY_STORAGE):null)||'null');}catch{}
+ loadStation(stored?.station);
  const gearDefault=[['K8','stand',3.5,-8.6,1.25,0],['K8','stand',9,-8.6,1.25,0],['MIXER','floor',10.2,-6.3,0,0],['PROJECTOR','floor',6.25,-9.45,0,180]];
  const fallback=(spaceId==='nightshift'?demo:isGear()?gearDefault:[]).map(([type,mode,x,y,height,rotation])=>({type,mode,x,y,height,rotation,tiltX:0,tiltY:0}));
  try{
@@ -483,7 +552,7 @@ function setSpace(id,{initial=false}={}){
  document.title=`9FOREST Viewer · ${spaceName()} 공간`;
  setView('3d');restoreItems();renderCatalog();setSettingsMode('gear');$('#clear-layout').textContent=isGear()?'기자재 비우기':'배치 비우기';
 }
-function importLayout(data){const id=validateLayout(data);setSpace(id);if(isGear()){trackRig.restore(data.lighting);applySpaceLighting();lightEditor.render();}if(id==='wess'){daylightRig.restore(data.daylight);daylightUI.render();}loadItems(layoutItems(data));loadDucts(hasDucts()?data.ducts||[]:[]);return serializeLayout();}
+function importLayout(data){const id=validateLayout(data);setSpace(id);if(isGear()){trackRig.restore(data.lighting);applySpaceLighting();lightEditor.render();}if(id==='wess'){daylightRig.restore(data.daylight);daylightUI.render();}if(room.station){loadStation(data.station);for(const d of ducts)if(normalizeDuct(d))drawDuct(d,false);}loadItems(layoutItems(data));loadDucts(hasDucts()?data.ducts||[]:[]);return serializeLayout();}
 renderCatalog();$('#search').addEventListener('input',renderCatalog);
 $('#space-select').addEventListener('change',e=>{setSpace(e.target.value);toast(`${spaceName()} 공간을 불러왔습니다`);});
 $('#save-layout').addEventListener('click',()=>{download(JSON.stringify(serializeLayout(),null,2),`9forest_${spaceId}_layout.json`,'application/json');toast('배치 파일을 저장했습니다');});
@@ -506,4 +575,4 @@ $('#zoom-out').addEventListener('click',()=>{if(camera.isOrthographicCamera){cam
 let initialSpace='nightshift';try{const q=new URL(location.href).searchParams.get('space'),saved=localStorage.getItem('9forest_active_space_v1');initialSpace=Object.hasOwn(spaces,q)?q:Object.hasOwn(spaces,saved)?saved:initialSpace;}catch{}
 setSpace(initialSpace,{initial:true});$('#status').hidden=true;
 let lastFrame=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,Math.max(0,(now-lastFrame)/1000));lastFrame=now;if(walkState)advanceWalk(dt,now);else controls.update();projectorRig.tick(now);indirectRig.tick();daylightRig.tick();renderer.render(scene,camera);}animate(lastFrame);
-window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>{loadItems([]);loadDucts([]);},addDuct:(params)=>addDuct(params),ducts:()=>ducts.map(d=>({...serializeDuct(d),totals:d.plan.totals,conflicts:ductConflicts(d).map(it=>it.type)})),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),daylight:()=>daylightRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};
+window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>{loadItems([]);loadDucts([]);},addDuct:(params)=>addDuct(params),station:()=>station&&{...station,atOrigin:stationAtOrigin()},setStation:(s)=>{if(!station)return null;if(s.enabled===false||s.enabled===true&&!station.enabled){setStationEnabled(s.enabled);}if(Number.isFinite(s.rotation))station.rotation=((s.rotation%360)+360)%360;if(Number.isFinite(s.x)||Number.isFinite(s.y))moveStation(s.x??station.x,s.y??station.y);commitStation();return {...station};},ducts:()=>ducts.map(d=>({...serializeDuct(d),totals:d.plan.totals,conflicts:ductConflicts(d).map(it=>it.type)})),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),daylight:()=>daylightRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};

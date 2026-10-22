@@ -4,7 +4,7 @@
   "export_sha256": "dc0f7edd88229700d5c8b92d0faa2eb3457ebc676f85da2576b11b3a4c2afcaf",
   "blender": "4.5.1 LTS",
   "source_meshes": 63,
-  "exported_meshes": 86,
+  "exported_meshes": 55,
   "source_triangles": 121128,
   "exported_triangles": 121128,
   "exact_triangle_count": true,
@@ -14,7 +14,7 @@
     "opening": 4,
     "roof": 3,
     "structure": 5,
-    "equipment": 54
+    "equipment": 23
   },
   "walls": {
     "A": 8,
@@ -22,7 +22,21 @@
     "C": 10,
     "D": 7
   },
-  "obstacles": 29,
+  "station": {
+    "meshes": 31,
+    "triangles": 30252,
+    "pivot": [
+      9.978,
+      -7.016
+    ],
+    "footprint": [
+      -1.747,
+      -1.919,
+      1.746,
+      1.919
+    ]
+  },
+  "obstacles": 32,
   "hall_m": [
     16,
     13
