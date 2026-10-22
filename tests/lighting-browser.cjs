@@ -34,7 +34,8 @@ async function floorPixel(p,world){await frames(p);return p.evaluate(world=>{con
   await page.locator('[data-light-preset="exhibition"]').click();const on=await brightness(page);
   await fs.mkdir(path.resolve(__dirname,'../test-results/browser'),{recursive:true});
   await page.screenshot({path:path.resolve(__dirname,'../test-results/browser/track-lighting-on.png')});
-  await page.locator('[data-light-preset="blackout"]').click();const off=await brightness(page);
+  await page.locator('[data-light-preset="blackout"]').click();const off=await brightness(page),unlitFloor=await floorPixel(page,[6,-6,.02]);
+  assert(unlitFloor>25,`The Space Him floor remains legible with every rail light off: ${unlitFloor}`);
   assert((await lights(page)).lamps.every(x=>x.intensity===0));assert(on>off+10,`Lights change actual rendered surfaces: ${on} vs ${off}`);
   await page.screenshot({path:path.resolve(__dirname,'../test-results/browser/track-lighting-blackout.png')});
   await page.locator('#lighting-simulation').uncheck();const work=await brightness(page);assert(work>off+10&&work<200,'Work lighting reveals the room without changing the lamp blackout');
@@ -78,6 +79,6 @@ async function floorPixel(p,world){await frames(p);return p.evaluate(world=>{con
   await page.setViewportSize({width:390,height:844});await page.locator('#lamp-tilt').scrollIntoViewIfNeeded();await range(page,'lamp-tilt',25);
   assert.equal((await lights(page)).fixtures.find(x=>x.id===l.selected).tilt,25);
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Mobile lighting controls fit the screen');
-  assert.deepEqual(errors,[]);console.log(`PASS Track lighting, cool defaults, angle sliders/numbers, feather (${hard.toFixed(1)} / ${soft.toFixed(1)}), blackout (${on.toFixed(1)} / ${off.toFixed(1)}), rail drag, persistence and JSON validation`);
+  assert.deepEqual(errors,[]);console.log(`PASS Track lighting, cool defaults, angle sliders/numbers, feather (${hard.toFixed(1)} / ${soft.toFixed(1)}), rail-off floor ${unlitFloor.toFixed(1)}, rail drag, persistence and JSON validation`);
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -9,7 +9,7 @@ export function lightingEditor(element,rig){
   const c=rig.config,l=rig.selectedLamp;
   element.innerHTML=`<div class="lighting-editor">
    <p class="micro">조명 기구를 클릭해 선택하거나 평면에서 레일을 따라 드래그하세요.</p>
-   <div class="light-presets"><button data-light-preset="exhibition">전시</button><button data-light-preset="performance">공연</button><button data-light-preset="blackout">암전</button></div>
+   <div class="light-presets"><button data-light-preset="exhibition">전시</button><button data-light-preset="performance">공연</button><button data-light-preset="blackout">레일 끄기</button></div>
    <div class="field full"><label for="lamp-select">조명 선택 · ${c.fixtures.length} / ${MAX_LAMPS}등</label><select id="lamp-select">${c.fixtures.map(x=>option(x.id,`${x.id} · ${RAILS.find(r=>r.id===x.rail).label}${x.enabled?'':' · 꺼짐'}`,l?.id)).join('')}</select></div>
    ${l?`<label class="light-on"><input id="lamp-enabled" type="checkbox" ${l.enabled?'checked':''}>${l.id} 켜기</label>
     <div class="light-angle-panel"><span class="control-label">선택 조명의 각도와 빛 번짐</span>
@@ -33,7 +33,7 @@ export function lightingEditor(element,rig){
    <label class="light-on"><input id="lighting-indirect" type="checkbox" ${c.indirect?'checked':''}>주변 반사광</label>
    ${slider('lighting-indirect-strength','반사광 강도',c.indirectStrength,0,200,5,'%')}
    <p class="micro">바닥·벽에 닿은 빛이 주변과 천장으로 반사됩니다. 조명의 위치·방향·밝기·색온도와 벽·기둥의 가림을 반영합니다.</p>
-   <div class="light-switches"><label><input id="lighting-simulation" type="checkbox" ${c.simulation?'checked':''}>암실 조명 보기</label><label><input id="lighting-fixtures" type="checkbox" ${c.showFixtures?'checked':''}>레일·기구 표시</label><label><input id="lighting-beams" type="checkbox" ${c.showBeams?'checked':''}>선택 조명의 빛 범위 표시</label></div>
+   <div class="light-switches"><label><input id="lighting-simulation" type="checkbox" ${c.simulation?'checked':''}>전시 조명 보기</label><label><input id="lighting-fixtures" type="checkbox" ${c.showFixtures?'checked':''}>레일·기구 표시</label><label><input id="lighting-beams" type="checkbox" ${c.showBeams?'checked':''}>선택 조명의 빛 범위 표시</label></div>
    <p class="micro">암실 조명 보기를 끄면 배치 작업용 밝기가 더해집니다.</p>
    <p class="mini-note">빛과 그림자를 실시간으로 확인하는 설치 검토용 미리보기입니다. 반사광은 간이 추정이며 실제 밝기는 조명 기구와 벽·바닥 마감에 따라 달라집니다. 조명 설정은 배치와 함께 저장됩니다.</p>
   </div>`;

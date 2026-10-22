@@ -19,7 +19,12 @@ const mean=rgb=>rgb.reduce((a,b)=>a+b)/3;
   // A single wall-directed lamp reflects onto the floor outside its direct cone,
   // while a closed store behind partitions remains unlit.
   await page.evaluate(()=>{const d=window.nineforestLayout.exportLayout();d.lighting.fixtures=[{...d.lighting.fixtures[1],rail:'main-front',t:(5-1)/11.75,yaw:0,tilt:65,beam:40,feather:60}];window.nineforestLayout.importLayout(d);});await ready(page);await page.locator('[data-view="top"]').click();
-  const floor=[5,-6.9,.02],store=[10,-3,.02],litFloor=await pixel(page,floor),blocked=await pixel(page,store);assert(mean(litFloor)>mean(blocked)+2,`Local reflection respects a closed partition: ${litFloor} / ${blocked}`);
+  const floor=[5,-6.9,.02],store=[10,-3,.02],litFloor=await pixel(page,floor),blocked=await pixel(page,store);
+  const litLayout=await page.evaluate(()=>window.nineforestLayout.exportLayout());
+  await page.evaluate(()=>{const d=window.nineforestLayout.exportLayout();d.lighting.master=0;window.nineforestLayout.importLayout(d);});await ready(page);
+  const baseFloor=await pixel(page,floor),baseStore=await pixel(page,store);
+  await page.evaluate(d=>window.nineforestLayout.importLayout(d),litLayout);await ready(page);
+  assert(mean(litFloor)-mean(baseFloor)>mean(blocked)-mean(baseStore)+2,`Local reflection respects a closed partition above the room's base light: ${litFloor} / ${baseFloor}, ${blocked} / ${baseStore}`);
   await page.locator('#lighting-indirect').uncheck();const darkFloor=await pixel(page,floor);assert(mean(litFloor)>mean(darkFloor)+2,`Floor beyond the direct cone receives wall reflection: ${litFloor} / ${darkFloor}`);
   await page.locator('#lighting-indirect').check();await page.locator('#lamp-kelvin').selectOption('2700');await ready(page);const warm=await pixel(page,floor);assert(warm[0]>warm[2]+1,'Reflected light follows warm colour temperature');
   await page.locator('#lighting-indirect-strength').evaluate(el=>{el.value='150';el.dispatchEvent(new Event('input',{bubbles:true}));});

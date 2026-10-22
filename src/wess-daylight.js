@@ -84,6 +84,14 @@ export class WessDaylight{
    const lens=new THREE.Mesh(new THREE.CircleGeometry(.042,12),lensMaterial);lens.position.set(x,y,2.465);lens.rotation.y=Math.PI;this.group.add(lens);this.lenses.push(lens);
    const light=new THREE.SpotLight(0xf1f7ff,0,5.8,Math.PI/4,.75,2);light.position.set(x,y,2.46);light.target.position.set(x+(y<2?-.2:.15),y+(y<2?.18:-.18),.35);light.castShadow=[0,2,5,7,9].includes(i);light.shadow.autoUpdate=false;light.shadow.mapSize.set(384,384);light.shadow.camera.layers.enable(1);light.shadow.normalBias=.014;light.shadow.radius=3;this.group.add(light,light.target);this.lamps.push(light);
   }
+  // Low-output downlights pick up the lobby and east rooms beyond the glazing.
+  // They follow the indoor-light slider but do not raise the daylight exposure.
+  this.auxiliaryLamps=[];this.auxiliaryLenses=[];
+  for(const [i,[x,y]] of [[9.1,-1.02],[9.3,.56],[13.45,2.3],[13.4,3.91]].entries()){
+   const trim=new THREE.Mesh(new THREE.CylinderGeometry(.067,.067,.012,16),housingMaterial);trim.position.set(x,y,2.594);trim.rotation.x=Math.PI/2;this.group.add(trim);
+   const lens=new THREE.Mesh(new THREE.CircleGeometry(.053,16),new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xe9f2ff,emissiveIntensity:0}));lens.position.set(x,y,2.582);lens.rotation.y=Math.PI;this.group.add(lens);this.auxiliaryLenses.push(lens);
+   const light=new THREE.SpotLight(0xf1f7ff,0,4.8,Math.PI/3,.9,2);light.position.set(x,y,2.57);light.target.position.set(x,y,.22);light.castShadow=i===1||i===2;light.shadow.autoUpdate=false;light.shadow.mapSize.set(256,256);light.shadow.camera.layers.enable(1);light.shadow.normalBias=.014;light.shadow.radius=3;this.group.add(light,light.target);this.auxiliaryLamps.push(light);
+  }
   // The inner room has continuous-looking, cool-white edge illumination in
   // addition to its spots. Keep the slim diffusers visible at zero output.
   this.strips=[];
@@ -113,7 +121,7 @@ export class WessDaylight{
   if(defer){this.volume.dynamicRoot=root;this.volume.attach(root);this.dynamicAt=performance.now()+120;}
   else{this.dynamicAt=0;this.volume.setDynamic(root);}
  }
- invalidateShadows(){for(const l of [this.sun,...this.lamps])l.shadow.needsUpdate=true;}
+ invalidateShadows(){for(const l of [this.sun,...this.lamps,...this.auxiliaryLamps])l.shadow.needsUpdate=true;}
  invalidateGeometry(){this.volume.invalidateGeometry(true);this.invalidateShadows();}
  setActive(active){this.active=active;this.group.visible=active;this.volume.setActive(active);if(active)this.invalidateShadows();this.apply();}
  restore(data){this.config=upgradeDaylight(data);this.apply();}
@@ -127,6 +135,8 @@ export class WessDaylight{
   this.sun.target.position.set(4,2,0);this.sun.position.fromArray(add([4,2,0],WESS_SUN_DIRECTION,-22));
   for(const light of this.lamps){light.intensity=this.config.artificial/100*12;light.visible=this.active&&this.config.artificial>0;}
   for(const lens of this.lenses)lens.material.emissiveIntensity=this.config.artificial/100*3;
+  for(const light of this.auxiliaryLamps){light.intensity=this.config.artificial/100*5.5;light.visible=this.active&&this.config.artificial>0;}
+  for(const lens of this.auxiliaryLenses)lens.material.emissiveIntensity=this.config.artificial/100*1.3;
   for(const strip of this.strips)strip.material.emissiveIntensity=this.config.artificial/100*2;
   for(const mesh of this.glass){mesh.material.emissiveIntensity=this.config.sky/100*.18;}
   this.volume.bounce=this.config.bounce;

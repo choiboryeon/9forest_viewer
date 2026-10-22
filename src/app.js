@@ -74,9 +74,11 @@ const daylightUI=daylightEditor($('#daylight-panel'),daylightRig);
 const lightEditor=lightingEditor($('#lighting-panel'),trackRig);
 function applySpaceLighting(){
  const wess=spaceId==='wess',simulation=wess||(isGear()&&trackRig.config.simulation);
- windowLight.visible=!isGear()&&!wess;galleryLight.visible=!isGear()&&!wess;ambient.visible=!simulation;ambient.intensity=simulation?0:isGear()?25:.9;fill.visible=!simulation;fill.intensity=isGear()?5:.42;
+ windowLight.visible=!isGear()&&!wess;galleryLight.visible=!isGear()&&!wess;
+ ambient.visible=!wess;ambient.intensity=isGear()?(simulation?12:25):.9;
+ fill.visible=!wess;fill.intensity=isGear()?(simulation?2:5):.42;
  if(isGear()){ambient.color.set(0xffffff);ambient.groundColor.copy(ambient.color).multiplyScalar(.62);}else{ambient.color.set(0xfff7eb);ambient.groundColor.set(0xb1b6b4);}
- scene.environmentIntensity=simulation?0:isGear()?5:.28;renderer.toneMappingExposure=isGear()?.04:1.04;
+ scene.environmentIntensity=wess?0:isGear()?(simulation?2:5):.28;renderer.toneMappingExposure=isGear()?.04:1.04;
  indirectRig.setLighting(trackRig.config);
 }
 function setSettingsMode(mode){
