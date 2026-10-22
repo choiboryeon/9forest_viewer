@@ -1,7 +1,7 @@
 """Export the Sunken (nineforests v5) hall to a plain triangle JSON for the viewer.
 
 Run from the repository root:
-  blender --background "<9 forests>/[virtual] sunken/modeling/nineforests_stage_v5.blend" \
+  blender --background "../../[virtual] sunken/modeling/nineforests_stage_v5.blend" \
     --python tools/blender/export_sunken.py -- data/sunken-source/sunken_v5_export.json
 
 Only the architecture, rigging, live-stage and building-detail collections are

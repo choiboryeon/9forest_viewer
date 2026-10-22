@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// Ported from duct-simulator/duct-simulator.html. The generator works in its own
+// Ported from 9 forests/[virtual] sunken/installation/duct/simulator/duct-simulator.html. The generator works in its own
 // Y-up box (x/z = floor, y = height) centred on the region; the viewer places
 // that box in a space and rotates it to Z-up. Same seed + parameters = same ducts.
 const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);

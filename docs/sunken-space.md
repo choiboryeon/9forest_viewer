@@ -11,12 +11,14 @@
 저장소 루트에서 실행합니다.
 
 ```powershell
-& 'C:/Program Files/Blender Foundation/Blender 4.5/blender.exe' --background '<9 forests>/[virtual] sunken/modeling/nineforests_stage_v5.blend' --python tools/blender/export_sunken.py -- data/sunken-source/sunken_v5_export.json
+& 'C:/Program Files/Blender Foundation/Blender 4.5/blender.exe' --background '../../[virtual] sunken/modeling/nineforests_stage_v5.blend' --python tools/blender/export_sunken.py -- data/sunken-source/sunken_v5_export.json
 node tools/convert-sunken.mjs
 npm run build
 ```
 
-추출 스크립트는 .blend를 저장하지 않습니다.
+저장소는 `9 forests/shared/9forest-viewer/`에 두고 쓰므로 원본 .blend는 `../../[virtual] sunken/`에 있습니다. 추출 스크립트는 .blend를 저장하지 않습니다.
+
+빌드 뒤 최종 뷰어를 `9 forests` 루트에 복사합니다: `cp 9forest_viewer.html ../../9forest_viewer.html`
 
 ## 포함 범위
 
@@ -49,7 +51,7 @@ npm run build
 
 ## 덕트 설치
 
-`src/duct.js`는 `duct art installation/duct-simulator/duct-simulator.html`의 생성기를 그대로 옮긴 모듈입니다. 스파이럴 덕트의 직교·사선 랜덤 워크, 고어 엘보, 플렉시블 덕트의 바닥 쌓임, 지지대 규칙과 금속 텍스처가 같습니다.
+`src/duct.js`는 `9 forests/[virtual] sunken/installation/duct/simulator/duct-simulator.html`의 생성기를 그대로 옮긴 모듈입니다. 스파이럴 덕트의 직교·사선 랜덤 워크, 고어 엘보, 플렉시블 덕트의 바닥 쌓임, 지지대 규칙과 금속 텍스처가 같습니다.
 
 - 생성기는 자기 영역(W × D × H, Y-up)에서 계산합니다. 뷰어는 영역을 공간에 놓고 Z-up으로 돌립니다. 영역 앞뒤 기준: 굵은 선 쪽 = 원본의 뒷벽(`z0`)으로, **벽면 부착** 덕트가 붙는 면입니다.
 - 영역은 바닥 범위와 고정 장애물(필라스터, 캣워크 계단·데크, 스테이지 등)을 피해서 놓입니다. 높이는 리깅 그리드 5.7 m까지이며, **천장 매달기**는 영역 윗면에 매답니다.
