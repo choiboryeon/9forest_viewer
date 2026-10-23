@@ -15,6 +15,10 @@ import {WessDaylight,daylightEditor,validateDaylight} from './wess-daylight.js';
 import {SunkenLighting} from './sunken-lighting.js';
 import {planDuct,buildDuct,normalizeDuctParams,isSharedDuctResource,MODE_KO as DUCT_MODE} from './duct.js';
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js';
+import {computeBoundsTree,acceleratedRaycast} from 'three-mesh-bvh';
+import {planShots,stageFov,cropFov,cropRect} from './render-shots.js';
+import {PathRender,skyFrom} from './path-render.js';
+THREE.Mesh.prototype.raycast=acceleratedRaycast;
 
 const $=q=>document.querySelector(q),$$=q=>[...document.querySelectorAll(q)];
 const input=JSON.parse($('#layout-data').textContent), spaces=input.spaces;
@@ -262,7 +266,7 @@ const dark=new THREE.MeshStandardMaterial({color:'#3d4e46',metalness:.63,roughne
 const put=(g,m,x,y,z0)=>{const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z0);if(g.type==='CylinderGeometry')mesh.rotation.x=Math.PI/2;mesh.castShadow=true;mesh.receiveShadow=true;group.add(mesh);return mesh;};
 const lift=mode==='hang'?.65:mode==='rod'?.35:.28,shadow=new THREE.Mesh(new THREE.PlaneGeometry(Math.max(.45,w+lift),Math.max(.45,d+lift)),new THREE.MeshBasicMaterial({map:contactShadowTexture,transparent:true,depthWrite:false,opacity:mode==='hang'?.13:mode==='rod'?.19:.23}));
 shadow.position.set(mode==='hang'?.15:.035,.035,.006);shadow.renderOrder=1;shadow.raycast=()=>{};group.add(shadow);
-if(isGear()){const ring=new THREE.Mesh(new THREE.RingGeometry(item.type==='K8'?.32:.23,item.type==='K8'?.35:.26,40),new THREE.MeshBasicMaterial({color:item.type==='PROJECTOR'?0x81c8df:item.type==='MIXER'?0x93c9a4:0xe4ae78,transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false}));ring.position.z=.014;ring.renderOrder=2;group.add(ring);}
+if(isGear()){const ring=new THREE.Mesh(new THREE.RingGeometry(item.type==='K8'?.32:.23,item.type==='K8'?.35:.26,40),new THREE.MeshBasicMaterial({color:item.type==='PROJECTOR'?0x81c8df:item.type==='MIXER'?0x93c9a4:0xe4ae78,transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false}));ring.position.z=.014;ring.renderOrder=2;ring.userData.viewerOnly=true;group.add(ring);}
 if(mode==='plinth'){put(new THREE.BoxGeometry(w+.10,d+.10,.14),soft,0,0,.08);put(new THREE.BoxGeometry(w+.14,d+.14,.018),dark,0,0,.014);}
 if(mode==='rod'){const r=clamp(Math.max(w,d)*.25,.11,.25);put(new THREE.CylinderGeometry(r,r,.035,40),dark,0,0,.018);put(new THREE.CylinderGeometry(.015,.015,Math.max(.02,z-.035),16),dark,0,0,z/2+.015);put(new THREE.CylinderGeometry(clamp(Math.min(w,d)*.25,.08,.17),clamp(Math.min(w,d)*.25,.08,.17),.025,40),soft,0,0,z-.014);}
 if(mode==='stand'){put(new THREE.CylinderGeometry(.0175,.0175,Math.max(.05,z-.18),12),dark,0,0,z/2+.09);put(new THREE.CylinderGeometry(.025,.025,.12,12),soft,0,0,z-.30);for(const a of [0,2*Math.PI/3,4*Math.PI/3]){const end=new THREE.Vector3(Math.cos(a)*.32,Math.sin(a)*.32,.03),start=new THREE.Vector3(0,0,.52),dir=end.clone().sub(start),leg=put(new THREE.CylinderGeometry(.014,.017,dir.length(),10),dark,(end.x+start.x)/2,(end.y+start.y)/2,(end.z+start.z)/2);leg.rotation.setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize()));}}
@@ -539,7 +543,7 @@ function setSpace(id,{initial=false}={}){
  if(walkState)stopWalk(false);if(drag){const p=drag.pointer;stopDrag();if(renderer.domElement.hasPointerCapture(p))renderer.domElement.releasePointerCapture(p);}
  if(!initial)persist();
  for(const it of items){clearGroup(it.root.children[0]);objectGroup.remove(it.root);}items=[];for(const d of ducts)disposeDuct(d);ducts=[];selected=null;
- projectorRig.clear();setRoomData(id);$('#unconfirmed').checked=false;$('#unconfirmed-control').hidden=!isGear();buildRoom();$('#space-select').value=id;$('#search').value='';
+ projectorRig.clear();setRoomData(id);shots=[];activeShot=-1;renderShotList();$('#unconfirmed').checked=false;$('#unconfirmed-control').hidden=!isGear();buildRoom();$('#space-select').value=id;$('#search').value='';
  $('#space-note').textContent=isSunken()?'[virtual] nineforests v5 콘셉트 공간 · 행잉 기준 리깅 5.7 m · 공간별 배치 자동 저장':isGear()?'도면 방향으로 표시 · 천고 2.64 m · 내부 구획 치수 확인 필요':id==='wess'?'도면 기반 · 층고 2.70 m 가정 · 공간별 배치 자동 저장':'사진 기반 공간 복원 · 공간별 배치 자동 저장';
  if(isGear())$('#space-note').insertAdjacentHTML('beforeend','<br><a href="https://github.com/choiboryeon/9forest_viewer/blob/main/docs/spacehim-model-review.md" target="_blank" rel="noopener">구조 검토 보고서 보기</a>');
  $('#library-eyebrow').textContent=isGear()?'PERFORMANCE GEAR / 4 UNITS':'OBJECT LIBRARY / 20';
@@ -572,7 +576,176 @@ $('#lighting-panel').addEventListener('focus-lamp',e=>{
 $('#walk-start').addEventListener('click',startWalk);$('#walk-stop').addEventListener('click',()=>stopWalk());$('#walk-pause').addEventListener('click',()=>{if(!walkState||walkState.finished)return;walkState.paused=!walkState.paused;$('#walk-pause').textContent=walkState.paused?'계속':'일시정지';$('#walk-detail').textContent=walkState.paused?'일시정지 · 눈높이 165cm':'이동 중 · 눈높이 165cm';});
 $('#zoom-in').addEventListener('click',()=>{if(camera.isOrthographicCamera){camera.zoom*=1.2;camera.updateProjectionMatrix();}else camera.position.sub(controls.target).multiplyScalar(.82).add(controls.target);controls.update();});
 $('#zoom-out').addEventListener('click',()=>{if(camera.isOrthographicCamera){camera.zoom/=1.2;camera.updateProjectionMatrix();}else camera.position.sub(controls.target).multiplyScalar(1.2).add(controls.target);controls.update();});$('#reset-view').addEventListener('click',()=>setView('3d'));
+// Render cuts: suggested still compositions and progressive browser renders.
+// Shots and renders share one crop (the frame guide), so the suggestion, the manual
+// adjustment and the final image all show the same framing.
+const pathRender=new PathRender($('#render-view'),()=>{const b=atob($('#oidn-weights').textContent.trim()),a=new Uint8Array(b.length);for(let i=0;i<b.length;i++)a[i]=b.charCodeAt(i);return a.buffer;});
+const sightCaster=new THREE.Raycaster();sightCaster.firstHitOnly=true;
+let shots=[],activeShot=-1,renderSky=null,rendering=false;
+const renderAspect=()=>Number($('#render-aspect').value)||1.5;
+const stageAspect=()=>{const s=$('.stage');return s.clientWidth/Math.max(1,s.clientHeight);};
+const boxOf=o=>{const b=new THREE.Box3().setFromObject(o);return {x0:b.min.x,x1:b.max.x,y0:b.min.y,y1:b.max.y,z0:b.min.z,z1:b.max.z};};
+function shotTargets(){
+ const list=items.map(it=>({id:it.uid,box:itemBox(it)}));
+ for(const d of ducts)if(d.root)list.push({id:d.uid,box:boxOf(d.root.children[0]||d.root),weight:2});
+ if(station?.enabled&&stationRoot)list.push({id:STATION_UID,box:boxOf(stationRoot)});
+ return list;
+}
+function sightOccluders(){
+ const walls=$('#walls').checked,structure=$('#structure').checked,equipment=$('#equipment').checked,unconfirmed=$('#unconfirmed').checked;
+ const room=spaceMeshes.filter(m=>{const u=m.userData;return !u.replacedLighting&&!/glass/i.test(m.name)&&(walls||!(u.wall||u.internalWall))&&(structure||!u.isStructure)&&(equipment||!u.isEquipment)&&(unconfirmed||!u.unconfirmed);});
+ const list=[...room,...items.map(i=>i.root),...ducts.map(d=>d.root).filter(Boolean),...(station?.enabled&&stationRoot?[stationRoot]:[])];
+ for(const o of list)o.traverse(m=>{if(m.isMesh&&m.geometry&&!m.geometry.boundsTree)computeBoundsTree.call(m.geometry);});
+ return list;
+}
+// Share of five sample points on the target that the camera sees directly.
+function sightline(list){
+ const origin=new THREE.Vector3(),dir=new THREE.Vector3();
+ return (pos,t,samples=5)=>{
+  const b=t.box,c=[(b.x0+b.x1)/2,(b.y0+b.y1)/2,(b.z0+b.z1)/2],dx=(b.x1-b.x0)*.3,dy=(b.y1-b.y0)*.3,dz=(b.z1-b.z0)*.3;
+  const points=[c,[c[0]-dx,c[1],c[2]],[c[0]+dx,c[1],c[2]],[c[0],c[1]-dy,c[2]+dz],[c[0],c[1]+dy,c[2]+dz]].slice(0,samples);let seen=0;
+  origin.set(...pos);
+  for(const p of points){
+   dir.set(...p).sub(origin);const len=dir.length();sightCaster.set(origin,dir.normalize());sightCaster.far=len;
+   const hit=sightCaster.intersectObjects(list,true).find(h=>!h.object.userData.ductPad&&!h.object.userData.ductOutline);
+   if(!hit||hit.distance>=len-.02){seen++;continue;}
+   let node=hit.object;while(node.parent&&!node.userData.uid)node=node.parent;
+   if(node.userData.uid===t.id)seen++;
+  }
+  return seen/points.length;
+ };
+}
+// Share of frame rays that meet something within `far` of the lens.
+function obstruction(list){
+ const origin=new THREE.Vector3(),dir=new THREE.Vector3();
+ return (pos,rays,far)=>{
+  origin.set(...pos);let blocked=0;
+  for(const r of rays){sightCaster.set(origin,dir.set(...r));sightCaster.far=far;if(sightCaster.intersectObjects(list,true).some(h=>!h.object.userData.ductPad&&!h.object.userData.ductOutline))blocked++;}
+  return blocked/rays.length;
+ };
+}
+function layoutFrameGuide(){
+ const guide=$('#frame-guide'),stage=$('.stage');if(guide.hidden)return;
+ const r=cropRect(stage.clientWidth,stage.clientHeight,renderAspect());
+ Object.assign(guide.style,{left:r.x+'px',top:r.y+'px',width:r.width+'px',height:r.height+'px'});
+}
+new ResizeObserver(layoutFrameGuide).observe($('.stage'));
+function setRenderOpen(open){
+ if(open&&walkState){const p=cameraWalk.position.clone(),d=cameraWalk.getWorldDirection(new THREE.Vector3());stopWalk();setView('3d');setPose(p,p.clone().addScaledVector(d,2.5),cropFov(cameraWalk.fov,renderAspect(),stageAspect()));}
+ else if(open&&view!=='3d')setView('3d');
+ $('#render-panel').hidden=!open;$('#frame-guide').hidden=!open;$('#render-open').setAttribute('aria-pressed',String(open));$('.right').dataset.render=String(open);
+ if(open){pathRender.warm();$('#settings-eyebrow').textContent='RENDER CUT';$('#settings-title').textContent='렌더 컷';$('.right').scrollTop=0;layoutFrameGuide();renderShotList();}else setSettingsMode(settingsMode);
+}
+function setPose(position,target,fov){
+ camera3.fov=stageFov(fov,renderAspect(),stageAspect());camera3.updateProjectionMatrix();camera3.position.copy(position);controls.target.copy(target);controls.update();
+ // An interior camera needs the ceiling for both the preview and the traced light.
+ if(!$('#roof').disabled&&position.z<roofZ(position.y)&&canPlace(meta,position.x,position.y,0,0,.01))$('#roof').checked=true;
+ updateRoom();
+}
+function applyShot(i){
+ const s=shots[i];if(!s)return;if(view!=='3d')setView('3d');activeShot=i;
+ setPose(new THREE.Vector3(...s.position),new THREE.Vector3(...s.target),s.fov);
+ $('#stage-title').textContent=`${spaceName()} · 렌더 컷 ${i+1}`;$('#stage-subtitle').textContent=`${s.label} · ${s.visible}/${s.total} 보임 · 화각 ${Math.round(s.fov)}°`;
+ renderShotList();
+}
+// Thumbnails come from the live renderer, cropped to the frame guide.
+function shotThumbs(){
+ const saved={position:camera3.position.clone(),target:controls.target.clone(),fov:camera3.fov,roof:$('#roof').checked};
+ const a=renderAspect(),w=200,h=Math.round(w/a);
+ for(const s of shots){
+  camera3.fov=stageFov(s.fov,a,stageAspect());camera3.updateProjectionMatrix();camera3.position.set(...s.position);camera3.lookAt(...s.target);
+  if(!$('#roof').disabled)$('#roof').checked=true;updateRoom();renderer.render(scene,camera3);
+  const src=renderer.domElement,r=cropRect(src.width,src.height,a),c=document.createElement('canvas');c.width=w;c.height=h;
+  c.getContext('2d').drawImage(src,r.x,r.y,r.width,r.height,0,0,w,h);s.thumb=c.toDataURL('image/jpeg',.82);
+ }
+ camera3.fov=saved.fov;camera3.updateProjectionMatrix();camera3.position.copy(saved.position);controls.target.copy(saved.target);$('#roof').checked=saved.roof;controls.update();updateRoom();
+}
+function renderShotList(){
+ $('#shot-list').innerHTML=shots.map((s,i)=>`<button class="shot-card" data-shot="${i}" aria-pressed="${i===activeShot}"><img src="${s.thumb||''}" alt=""><span>컷 ${i+1} · ${esc(s.label)}<small>${s.visible}/${s.total} 보임 · 화각 ${Math.round(s.fov)}°</small></span></button>`).join('');
+ for(const b of $$('[data-shot]'))b.addEventListener('click',()=>applyShot(Number(b.dataset.shot)));
+}
+function suggestShots(){
+ const targets=shotTargets();
+ if(!targets.length){shots=[];activeShot=-1;renderShotList();$('#shot-note').textContent=`먼저 ${isGear()?'기자재':'사물이나 덕트'}를 배치하세요.`;return;}
+ const started=performance.now();
+ const occluders=sightOccluders();
+ shots=planShots({meta,targets,aspect:renderAspect(),count:4,ceilingAt:(x,y)=>roofZ(y),visibility:sightline(occluders),obstruction:obstruction(occluders)});
+ if(!shots.length){renderShotList();$('#shot-note').textContent='카메라를 세울 빈 바닥이 부족합니다. 시점을 직접 잡아 렌더하세요.';return;}
+ shotThumbs();applyShot(0);
+ $('#shot-note').textContent=`${targets.length}${isGear()?'개':'점'}을 기준으로 구도 ${shots.length}개를 골랐습니다 (${Math.round(performance.now()-started)} ms). 화면을 드래그해 다듬을 수 있습니다.`;
+}
+// Window portals: an emitting rectangle just inside each exterior pane. Sky light
+// that reaches the room only through small openings is far too noisy to find by
+// sampling the whole sky, so the tracer samples these rectangles directly instead.
+const GLASS=/D obscure glass|Glass_|glazing|skylight_glass/i;
+function windowPortals(radiance){
+ const lights=[],box=new THREE.Box3(),size=new THREE.Vector3(),c=new THREE.Vector3();
+ for(const m of spaceMeshes){
+  if(!m.visible||!GLASS.test(m.name))continue;
+  box.setFromObject(m);box.getSize(size);box.getCenter(c);
+  const axis=size.x<size.y?(size.x<size.z?'x':'z'):(size.y<size.z?'y':'z');if(size[axis]>.2)continue;
+  const n=new THREE.Vector3();
+  if(axis==='z')n.set(0,0,-1);
+  else{
+   n[axis]=1;const inside=s=>canPlace(meta,c.x+n.x*s*.5,c.y+n.y*s*.5,0,0,.01);
+   const front=inside(1),back=inside(-1);if(front===back)continue;if(back)n.negate();
+  }
+  const emitted=m.material.emissive.r*m.material.emissiveIntensity;
+  const [w,h]=axis==='z'?[size.x,size.y]:[axis==='x'?size.y:size.x,size.z];
+  const light=new THREE.RectAreaLight(radiance.color,Math.max(radiance.level,emitted),w,h);
+  light.up.set(...(axis==='z'?[0,1,0]:[0,0,1]));light.position.copy(c).addScaledVector(n,.02);light.lookAt(c.clone().add(n));
+  lights.push(light);
+ }
+ return lights;
+}
+// Swap viewer-only helpers and lights the tracer cannot read for a capture state.
+function stageForTrace(scene){
+ const hidden=[],hemis=[],undo=[];const hide=o=>{if(o?.visible){o.visible=false;hidden.push(o);}};
+ hide(grid);hide(roomShadows);hide(selectionBox);
+ const chainVisible=o=>{for(let p=o;p;p=p.parent)if(!p.visible)return false;return true;};
+ const lights=[];scene.traverse(o=>{if(o.isLight)lights.push(o);if(o.userData.ductPad||o.userData.ductOutline||o.userData.viewerOnly)hide(o);});
+ for(const l of lights){if(l.isHemisphereLight){if(chainVisible(l))hemis.push(l);hide(l);}else if(!chainVisible(l)||!(l.intensity>0))hide(l);}
+ // WESS's hemisphere stands in for fixture bounce, which the tracer computes itself;
+ // its sky slider instead sets the daylight outside the windows.
+ renderSky?.dispose();renderSky=spaceId==='wess'?skyFrom(scene,hemis.filter(h=>h!==daylightRig.fill),daylightRig.config.sky/100*.6):skyFrom(scene,hemis);
+ const sky=renderSky.topColor,level=Math.max(sky.r,sky.g,sky.b);
+ const portals=windowPortals({color:level>0?sky.clone().multiplyScalar(1/level):new THREE.Color(1,1,1),level});
+ if(portals.length){
+  scene.add(...portals);
+  // The portals replace the glowing panes and the spots that faked their light.
+  for(const m of spaceMeshes)if(GLASS.test(m.name)&&m.material.emissiveIntensity){const v=m.material.emissiveIntensity;m.material.emissiveIntensity=0;undo.push(()=>m.material.emissiveIntensity=v);}
+  if(spaceId==='nightshift')for(const l of [windowLight,...windowSideLights])hide(l);
+ }
+ const prev={environment:scene.environment,environmentIntensity:scene.environmentIntensity,background:scene.background,backgroundIntensity:scene.backgroundIntensity},rot=[scene.environmentRotation.clone(),scene.backgroundRotation.clone()];
+ Object.assign(scene,{environment:portals.length?null:renderSky,environmentIntensity:1,background:renderSky,backgroundIntensity:1});scene.environmentRotation.set(Math.PI/2,0,0);scene.backgroundRotation.set(Math.PI/2,0,0);
+ return ()=>{for(const o of hidden)o.visible=true;for(const f of undo)f();for(const l of portals){scene.remove(l);l.dispose();}Object.assign(scene,prev);scene.environmentRotation.copy(rot[0]);scene.backgroundRotation.copy(rot[1]);};
+}
+async function startRender(){
+ if(rendering)return;
+ if(walkState)setRenderOpen(true);if(!camera.isPerspectiveCamera){toast('입체 시점에서 렌더할 수 있습니다');return;}
+ const aspect=renderAspect(),long=Number($('#render-size').value),samples=Number($('#render-quality').value);
+ const width=aspect>=1?long:Math.round(long*aspect),height=aspect>=1?Math.round(long/aspect):long;
+ const cam=camera.clone();cam.aspect=aspect;cam.fov=cropFov(camera.fov,aspect,stageAspect());cam.updateProjectionMatrix();
+ updateRoom();rendering=true;
+ $('#render-modal').hidden=false;$('#render-download').hidden=true;$('#render-finish').hidden=false;$('#render-progress').value=0;$('#render-count').textContent='장면 준비 중';
+ $('#render-title').textContent=`${spaceName()} · ${width} × ${height}`;
+ const started=performance.now();
+ try{
+  const blob=await pathRender.start({scene,camera:cam,width,height,samples,exposure:Number($('#render-ev').value),stage:stageForTrace,onDenoise:()=>{$('#render-count').textContent='노이즈 제거 중 (OIDN)';},onProgress:(n,total,compiling)=>{$('#render-progress').value=Math.round(n/total*100);$('#render-count').textContent=compiling?'렌더러 준비 중 · 처음에는 1분 정도 걸릴 수 있습니다':`${n} / ${total} 샘플 · ${Math.round((performance.now()-started)/1000)}초`;}});
+  if(!blob)return;
+  const link=$('#render-download');if(link.href.startsWith('blob:'))URL.revokeObjectURL(link.href);
+  link.href=URL.createObjectURL(blob);link.download=`9forest_${spaceId}_render_${activeShot>=0?`cut${activeShot+1}_`:''}${width}x${height}.png`;link.hidden=false;$('#render-finish').hidden=true;
+  $('#render-count').textContent=`완료 · ${pathRender.samples} 샘플${pathRender.denoiser==='oidn'?' · AI 노이즈 제거':pathRender.denoiser?' · 노이즈 완화':''} · ${Math.round((performance.now()-started)/1000)}초`;
+ }catch(err){console.error(err);$('#render-count').textContent=pathRender.lost?'GPU가 렌더를 중단했습니다. 페이지를 새로고침한 뒤 더 작은 크기로 시도하세요':'이 브라우저에서 렌더하지 못했습니다';toast('렌더 중 오류가 발생했습니다');}
+ finally{rendering=false;}
+}
+function closeRenderModal(){pathRender.cancel();$('#render-modal').hidden=true;}
+$('#render-open').addEventListener('click',()=>setRenderOpen($('#render-panel').hidden));$('#render-close').addEventListener('click',()=>setRenderOpen(false));
+$('#shot-suggest').addEventListener('click',suggestShots);$('#render-start').addEventListener('click',startRender);
+$('#render-aspect').addEventListener('change',()=>{const fov=cropFov(camera3.fov,Number($('#render-aspect').dataset.prev||1.5),stageAspect());$('#render-aspect').dataset.prev=$('#render-aspect').value;if(view==='3d'){camera3.fov=stageFov(fov,renderAspect(),stageAspect());camera3.updateProjectionMatrix();}layoutFrameGuide();if(shots.length)suggestShots();});
+$('#render-finish').addEventListener('click',()=>pathRender.finish());$('#render-modal-close').addEventListener('click',closeRenderModal);
+$('#render-modal').addEventListener('click',e=>{if(e.target.id==='render-modal')closeRenderModal();});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#render-modal').hidden)closeRenderModal();});
 let initialSpace='nightshift';try{const q=new URL(location.href).searchParams.get('space'),saved=localStorage.getItem('9forest_active_space_v1');initialSpace=Object.hasOwn(spaces,q)?q:Object.hasOwn(spaces,saved)?saved:initialSpace;}catch{}
 setSpace(initialSpace,{initial:true});$('#status').hidden=true;
 let lastFrame=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.1,Math.max(0,(now-lastFrame)/1000));lastFrame=now;if(walkState)advanceWalk(dt,now);else controls.update();projectorRig.tick(now);indirectRig.tick();daylightRig.tick();renderer.render(scene,camera);}animate(lastFrame);
-window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>{loadItems([]);loadDucts([]);},addDuct:(params)=>addDuct(params),station:()=>station&&{...station,atOrigin:stationAtOrigin()},setStation:(s)=>{if(!station)return null;if(s.enabled===false||s.enabled===true&&!station.enabled){setStationEnabled(s.enabled);}if(Number.isFinite(s.rotation))station.rotation=((s.rotation%360)+360)%360;if(Number.isFinite(s.x)||Number.isFinite(s.y))moveStation(s.x??station.x,s.y??station.y);commitStation();return {...station};},ducts:()=>ducts.map(d=>({...serializeDuct(d),totals:d.plan.totals,conflicts:ductConflicts(d).map(it=>it.type)})),exportLayout:serializeLayout,importLayout,lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),daylight:()=>daylightRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};
+window.nineforestLayout=window.nightshiftLayout={state:()=>({spaceId,view,selected,walking:!!walkState,walkProgress:walkState?walkState.time/walkState.plan.total:null,walkPeek:walkState?.peek?(walkState.peek.dragging?'dragging':'returning'):null,walkForward:walkState?cameraWalk.getWorldDirection(new THREE.Vector3()).toArray():null,walkAutoForward:walkState?new THREE.Vector3(0,0,-1).applyQuaternion(walkState.autoQuaternion).toArray():null,items:items.map(({type,mode,x,y,height,rotation,tiltX,tiltY,root})=>({type,mode,x,y,height,rotation,tiltX,tiltY,floorZ:root.position.z})),roomMeshes:spaceMeshes.length,renderTriangles:renderer.info.render.triangles}),add:addItem,select:(uid)=>select(uid),setView,setSpace,startWalk,stopWalk,clear:()=>{loadItems([]);loadDucts([]);},addDuct:(params)=>addDuct(params),station:()=>station&&{...station,atOrigin:stationAtOrigin()},setStation:(s)=>{if(!station)return null;if(s.enabled===false||s.enabled===true&&!station.enabled){setStationEnabled(s.enabled);}if(Number.isFinite(s.rotation))station.rotation=((s.rotation%360)+360)%360;if(Number.isFinite(s.x)||Number.isFinite(s.y))moveStation(s.x??station.x,s.y??station.y);commitStation();return {...station};},ducts:()=>ducts.map(d=>({...serializeDuct(d),totals:d.plan.totals,conflicts:ductConflicts(d).map(it=>it.type)})),exportLayout:serializeLayout,importLayout,shots:()=>shots.map(({thumb,...s})=>s),suggestShots,applyShot,renderInfo:()=>({samples:pathRender.samples,exposure:pathRender.exposure,rendering}),lighting:()=>trackRig.describe(),indirect:()=>indirectRig.describe(),daylight:()=>daylightRig.describe(),projection:()=>projectorRig.describe(),projectWorld:(point)=>{const v=new THREE.Vector3(...point).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},cameraPose:()=>({position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),target:controls.target.toArray()}),projectLamp:(id)=>{const l=trackRig.config.fixtures.find(l=>l.id===id);if(!l)return null;const v=new THREE.Vector3(...railPoint(l.rail,l.t)).add(new THREE.Vector3(0,0,-.145)).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};},selectedBounds:()=>{const it=selectedItem();if(!it)return null;it.root.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(it.model);return {min:b.min.toArray(),max:b.max.toArray()};},projectSelected:()=>{const it=selectedItem();if(!it)return null;const v=new THREE.Box3().setFromObject(it.model).getCenter(new THREE.Vector3()).project(camera),r=renderer.domElement.getBoundingClientRect();return {x:r.left+(v.x*.5+.5)*r.width,y:r.top+(-v.y*.5+.5)*r.height};}};
