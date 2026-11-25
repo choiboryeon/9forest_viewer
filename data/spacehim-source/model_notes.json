@@ -4,7 +4,9 @@
   "coordinates": "plan u right/v down; Blender x=u,y=-v,z=up",
   "source_files": [
     "공간 힘 지하 도면.jpg",
-    "공간 힘 지하.pdf"
+    "공간 힘 지하.pdf",
+    "수정 도면/지하 도면(2026).png",
+    "수정 도면/HEEM_B1F.skp (screenshots HEEM_B1F*.png)"
   ],
   "stated_dimensions_m": {
     "main_width": 13.95,
@@ -14,9 +16,37 @@
     "ceiling": 2.64,
     "stair_enclosure_depth": 2.55,
     "front_segment": 0.86,
-    "notch_width": 0.78,
-    "notch_depth": 0.45
+    "entry_return_wall_2026": 1.96
   },
+  "revisions": [
+    {
+      "date": "2026-11-16",
+      "object": "Storage_south_front, Sink_* removed",
+      "note": "Per the user: the wall between the gallery and the lower storage room (v=4.86, u 7.96-13.95) and the sink were removed. The lower storage room (u 8.1-14.46, v 3.65-4.86) is now gallery floor; its north wall (with the door to the upper storage), the short west wall at u=8.1 and the stair stay."
+    },
+    {
+      "date": "2026-11-16",
+      "object": "Service notch / outline",
+      "note": "2026 revised plan shows the gallery north wall as one straight line from the stair door to the east wall. Removed the 0.78 x 0.45 service notch, the storage front set back to v=4.71 with its open bay (u 11.72-13.45) and the 0.50/0.25 jog at u 13.45-13.95. The east wall straight part is now v 4.86-9.11 (4.25 m) while the revised plan labels it 4150; the 0.1 m difference is unresolved."
+    },
+    {
+      "date": "2026-11-16",
+      "object": "Partition_Entry_return_2026",
+      "plan_uv": [
+        [
+          6.0,
+          4.86
+        ],
+        [
+          6.0,
+          6.82
+        ]
+      ],
+      "thickness": 0.15,
+      "height": 2.64,
+      "note": "New short wall from the 2026 revised plan. Length stated (1960); line u=6.0 (continuation of the stair west wall, west of the stair entry) read from the SketchUp plan and 3D view. Height assumed full ceiling."
+    }
+  ],
   "outer_inner_face_polygon_uv": [
     [
       0,
@@ -32,19 +62,11 @@
     ],
     [
       13.95,
-      4.96
-    ],
-    [
-      13.45,
-      4.96
-    ],
-    [
-      13.45,
-      4.71
+      4.86
     ],
     [
       14.46,
-      4.71
+      4.86
     ],
     [
       14.46,
@@ -93,32 +115,24 @@
       4.86
     ],
     [
-      7.96,
+      8.1,
       4.86
     ],
     [
-      7.96,
-      5.16
+      8.1,
+      3.65
     ],
     [
-      8.74,
-      5.16
+      14.46,
+      3.65
     ],
     [
-      8.74,
-      4.71
-    ],
-    [
-      13.45,
-      4.71
-    ],
-    [
-      13.45,
-      4.96
+      14.46,
+      4.86
     ],
     [
       13.95,
-      4.96
+      4.86
     ],
     [
       13.95,
@@ -156,5 +170,5 @@
     "Storage boundaries, doors, beam positions and utilities are inferred, not surveyed."
   ],
   "excluded": "Exhibited artworks, movable tables, screens and other temporary installation contents.",
-  "gallery_gross_floor_m2": 114.676
+  "gallery_gross_floor_m2": 121.949
 }

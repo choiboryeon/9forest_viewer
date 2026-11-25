@@ -1,0 +1,16 @@
+[
+ {
+  "id": "PJS",
+  "title": "박지수 아트웍",
+  "artist": "박지수",
+  "note": "종이 여러 장을 이어 붙인 상·하 2단 평면 작품. 투명 배경 컷아웃 사진을 실측 크기에 맞춰 텍스처로 썼습니다.",
+  "thumb": "assets/artworks/parkjisu/thumb.webp",
+  "model": "assets/artworks/parkjisu/parkjisu_set.glb",
+  "gap_m": 0.14,
+  "gap_note": "상·하단 간격 14 cm는 전체 사진(전체_1)에서 잰 값입니다.",
+  "parts": [
+   {"id": "top", "label": "상단", "width_m": 1.145, "height_m": 0.87, "image": "assets/artworks/parkjisu/top.webp"},
+   {"id": "bottom", "label": "하단", "width_m": 1.183, "height_m": 0.50, "image": "assets/artworks/parkjisu/bottom.webp"}
+  ]
+ }
+]

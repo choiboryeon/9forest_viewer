@@ -27,10 +27,10 @@ async function floorPixel(page,point){
   assert(windowSide>opposite+12,`Frosted window light falls off across the room: ${windowSide} / ${opposite}`);
   assert(ledWash>backCorner+18,`The suspended LEDs light the room beyond its base fill: ${ledWash} / ${backCorner}`);
   await page.locator('#space-select').selectOption('wess');
-  await page.evaluate(()=>{const data=nineforestLayout.exportLayout();data.daylight={version:2,sky:0,sun:0,artificial:0,bounce:true};nineforestLayout.importLayout(data);});
-  await page.waitForFunction(()=>nineforestLayout.daylight().pending===0);
-  await page.locator('[data-view="top"]').click();
-  assert(await floorPixel(page,[2.2,.8,.02])<20,'Night Shift lights stay off in WESS');
+  await page.waitForFunction(()=>nineforestLayout.state().spaceId==='wess');
+  assert(await page.evaluate(()=>nineforestLayout.wessSun().visible),'WESS window sun is on in WESS');
+  await page.locator('#space-select').selectOption('nightshift');
+  assert(!(await page.evaluate(()=>nineforestLayout.wessSun().visible)),'WESS window sun stays off in Night Shift');
   assert.deepEqual(errors,[]);
   console.log(`PASS Night Shift window gradient ${windowSide.toFixed(1)} / ${opposite.toFixed(1)}, LED wash ${ledWash.toFixed(1)} / ${backCorner.toFixed(1)}, cross-space isolation`);
  }finally{await browser.close();}

@@ -18,6 +18,36 @@ export function defaultLighting(){
  }
  return {version:3,master:100,simulation:true,showFixtures:true,showBeams:true,indirect:true,indirectStrength:100,fixtures};
 }
+// Event default ("무대 중심"): spots gathered on the stage end (presenter desk and
+// the image wall), a dim work light over the stream desk and a
+// faint audience wash; the north rooms and outer fixtures stay off so the room
+// falls off into darkness around the stage like a vignette. The image itself is
+// never lit. [rail, x along rail, enabled, dimmer, beam, yaw, tilt]
+const STAGE=[
+ ['main-front',11.4,false,0,65,180,20],['main-front',7.6,true,85,30,194,68],['main-front',5,true,18,70,180,15],['main-front',2.8,true,14,55,172,21],
+ ['main-back',9.3,true,100,40,53,31],['main-back',7.6,true,70,40,317,31],['main-back',4,true,30,50,0,10],['main-back',11.4,false,0,65,0,20],
+ ['upper-left',1.2+.1*3,false,0,65,270,20],['upper-left',1.2+.87*3,false,0,65,270,20],['upper-right',1.2+.1*3,false,0,65,90,20],['upper-right',1.2+.87*3,false,0,65,90,20]];
+// East-wall presets (versions 15 and 16);
+// layouts that still carry one unchanged switch to the current preset when opened.
+const EAST16_STAGE=[
+ ['main-front',12.6,true,70,35,344,35],['main-front',11.4,false,0,65,180,20],['main-front',9.6,true,18,70,214,28],['main-front',7,false,0,65,180,20],
+ ['main-back',12.4,true,100,40,10,33],['main-back',11.2,true,85,30,288,48],['main-back',9.7,true,14,55,351,44],['main-back',8,true,30,50,0,7],
+ ['upper-left',1.2+.1*3,false,0,65,270,20],['upper-left',1.2+.87*3,false,0,65,270,20],['upper-right',1.2+.1*3,false,0,65,90,20],['upper-right',1.2+.87*3,false,0,65,90,20]];
+const EAST15_STAGE=[
+ ['main-front',12.6,true,100,40,4,25],['main-front',11.4,true,85,30,304,52],['main-front',9.6,true,18,70,214,28],['main-front',7,false,0,65,180,20],
+ ['main-back',12.4,true,100,35,311,38],['main-back',11.2,true,70,40,323,39],['main-back',9.7,true,30,50,353,14],['main-back',8.2,true,14,55,318,46],
+ ...STAGE.slice(8)];
+const fromTable=table=>{
+ const c=defaultLighting();
+ c.fixtures=c.fixtures.map((l,i)=>{const [rail,x,enabled,dimmer,beam,yaw,tilt]=table[i],main=rail.startsWith('main');return {...l,rail,t:main?(x-1)/11.75:(x-1.2)/3,enabled,dimmer,beam,yaw,tilt};});
+ return c;
+};
+export function stageLighting(){return fromTable(STAGE);}
+export function isLegacyStageLighting(config){
+ const f=config?.fixtures;
+ return Array.isArray(f)&&[EAST15_STAGE,EAST16_STAGE].some(table=>{const ref=fromTable(table).fixtures;
+  return f.length===ref.length&&f.every((l,i)=>l.rail===ref[i].rail&&Math.abs(l.t-ref[i].t)<.01&&l.enabled===ref[i].enabled&&l.yaw===ref[i].yaw&&l.tilt===ref[i].tilt&&l.beam===ref[i].beam&&l.dimmer===ref[i].dimmer);});
+}
 export function validateLighting(data){
  if(data==null)return;
  if(typeof data!=='object'||![1,2,3].includes(data.version)||!Array.isArray(data.fixtures)||data.fixtures.length>MAX_LAMPS)throw Error('레일 조명 파일 형식을 확인해 주세요.');
@@ -132,6 +162,7 @@ export class TrackLighting{
  }
  remove(id){this.config.fixtures=this.config.fixtures.filter(l=>l.id!==id);this.selected=this.config.fixtures[0]?.id||null;this.rebuild();this.onChange();}
  preset(name){
+  if(name==='stage'){const keep={...this.config};this.restore({...stageLighting(),simulation:keep.simulation,showFixtures:keep.showFixtures,showBeams:keep.showBeams,indirect:keep.indirect,indirectStrength:keep.indirectStrength});this.onChange();return;}
   this.config.master=name==='blackout'?0:name==='performance'?18:100;
   for(const l of this.config.fixtures){l.enabled=true;l.dimmer=100;this.syncPower(l);}this.syncVisibility();this.onChange();
  }

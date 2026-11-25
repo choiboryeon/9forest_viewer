@@ -1,4 +1,4 @@
-import {RAILS,MAX_LAMPS} from './track-lighting.js';
+import {stageLighting,RAILS,MAX_LAMPS} from './track-lighting.js';
 
 export function lightingEditor(element,rig){
  const $=q=>element.querySelector(q);
@@ -9,7 +9,7 @@ export function lightingEditor(element,rig){
   const c=rig.config,l=rig.selectedLamp;
   element.innerHTML=`<div class="lighting-editor">
    <p class="micro">조명 기구를 클릭해 선택하거나 평면에서 레일을 따라 드래그하세요.</p>
-   <div class="light-presets"><button data-light-preset="exhibition">전시</button><button data-light-preset="performance">공연</button><button data-light-preset="blackout">레일 끄기</button></div>
+   <div class="light-presets"><button data-light-preset="stage">무대 중심</button><button data-light-preset="exhibition">전시</button><button data-light-preset="performance">공연</button><button data-light-preset="blackout">레일 끄기</button></div>
    <div class="field full"><label for="lamp-select">조명 선택 · ${c.fixtures.length} / ${MAX_LAMPS}등</label><select id="lamp-select">${c.fixtures.map(x=>option(x.id,`${x.id} · ${RAILS.find(r=>r.id===x.rail).label}${x.enabled?'':' · 꺼짐'}`,l?.id)).join('')}</select></div>
    ${l?`<label class="light-on"><input id="lamp-enabled" type="checkbox" ${l.enabled?'checked':''}>${l.id} 켜기</label>
     <div class="light-angle-panel"><span class="control-label">선택 조명의 각도와 빛 번짐</span>
@@ -44,7 +44,8 @@ export function lightingEditor(element,rig){
   for(const [id,key] of [['lighting-simulation','simulation'],['lighting-fixtures','showFixtures'],['lighting-beams','showBeams']])$('#'+id).addEventListener('change',e=>rig.setGlobal({[key]:e.target.checked}));
   $('#lamp-select').addEventListener('change',e=>{rig.select(e.target.value);render();});
   $('#lamp-add').addEventListener('click',()=>{rig.add(l?.rail);render();});
-  $('#lighting-reset').addEventListener('click',()=>{rig.restore();rig.onChange();render();});
+  // Reset returns to the event default (stage-centred), the space's starting state.
+  $('#lighting-reset').addEventListener('click',()=>{rig.restore(stageLighting());rig.onChange();render();});
   if(!l)return;
   $('#lamp-enabled').addEventListener('change',e=>{rig.edit(l.id,{enabled:e.target.checked});render();});
   $('#lamp-rail').addEventListener('change',e=>{rig.edit(l.id,{rail:e.target.value});render();});

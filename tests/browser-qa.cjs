@@ -119,7 +119,9 @@ async function main() {
     assert.equal((await state(page)).spaceId, 'nightshift');
     assert.equal((await state(page)).items.length, 5);
     assert.equal(await page.evaluate(() => window.nightshiftLayout === window.nineforestLayout), true);
-    assert.equal(await page.locator('[data-add]').count(), 20);
+    // 20 objects plus the two Night Shift desks (T1, T2).
+    assert.equal(await page.locator('[data-add]').count(), 22);
+    assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('[data-add^="T"]')].map(b => b.dataset.add)), ['T1', 'T2']);
   });
   let nightshift;
   await check('Nightshift add, edit, mount, duplicate, remove and pointer drag', async () => {

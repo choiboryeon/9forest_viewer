@@ -11,8 +11,8 @@ const {chromium}=require('playwright');
   await page.goto((process.env.VIEWER_URL||'http://127.0.0.1:4186/9forest_viewer.html')+'?space=spacehim');
   await page.waitForFunction(()=>window.nineforestLayout?.state().renderTriangles>0);
   let s=await page.evaluate(()=>window.nineforestLayout.state());
-  assert.equal(s.spaceId,'spacehim');assert(s.roomMeshes>=160);
-  assert.deepEqual(s.items.map(i=>i.type),['K8','K8','MIXER','PROJECTOR']);
+  assert.equal(s.spaceId,'spacehim');assert(s.roomMeshes>=150);
+  assert.deepEqual(s.items.map(i=>i.type),['K8','K8','MIXER','PROJECTOR','DESK','CHAIR','CHAIR','STREAM_DESK','CHAIR','CHAIR','CAMERA',...Array(20).fill('FOLDING'),'GUITAR']);
   assert(s.items.every(i=>i.y<0));
   assert.equal(await page.locator('#unconfirmed').isChecked(),false);
   assert.equal(await page.locator('[data-add="R01"]').count(),0);
@@ -31,8 +31,13 @@ const {chromium}=require('playwright');
   s=await page.evaluate(()=>window.nineforestLayout.state());assert.equal(s.items[0].mode,'floor');
   let box=await page.evaluate(()=>window.nineforestLayout.selectedBounds());assert(Math.abs(box.min[2]-.012)<1e-6);assert(Math.abs(box.max[2]-.462)<1e-6);
   const exported=await page.evaluate(()=>window.nineforestLayout.exportLayout());
-  assert.equal(exported.version,7);
-  await page.evaluate(()=>window.nineforestLayout.importLayout({version:4,space_id:'spacehim',items:[{type:'K8',mode:'stand',x:3.5,y:8.6,height:1.25,rotation:180}]}));
+  assert.equal(exported.version,17);
+  const labels=await page.evaluate(()=>window.nineforestLayout.labels());
+  assert.equal(labels.filter(l=>l.position[2]>.7).length,2,'desk names lie on the two desk tops');
+  assert(labels.every(l=>l.scale>=.4&&l.scale<=4),'labels follow the camera within limits');
+  const wiring=await page.evaluate(()=>window.nineforestLayout.signals().routes.map(r=>`${r.kind}:${r.from}>${r.to}`));
+  for(const w of ['XLR:콘솔>스피커 좌','XLR:콘솔>스피커 우','XLR:발표 노트북>콘솔','HDMI:송출 카메라>컨트롤 노트북','HDMI:발표 노트북>프로젝터','TS:기타>콘솔'])assert(wiring.includes(w),w);
+  await page.evaluate(()=>window.nineforestLayout.importLayout({version:4,space_id:'spacehim',items:[{type:'K8',mode:'stand',x:3.4,y:8.6,height:1.25,rotation:180}]}));
   s=await page.evaluate(()=>window.nineforestLayout.state());assert.equal(s.items[0].y,-8.6);assert.equal(s.items[0].rotation,0);
   await page.evaluate(()=>window.nineforestLayout.importLayout({version:5,space_id:'spacehim',items:[{type:'MIXER',mode:'floor',x:.5,y:-2,rotation:0}]}));
   s=await page.evaluate(()=>window.nineforestLayout.state());assert.equal(s.items[0].x,.5);
@@ -51,6 +56,9 @@ const {chromium}=require('playwright');
   await page.setViewportSize({width:390,height:844});
   const widths=await page.evaluate(()=>[innerWidth,document.documentElement.scrollWidth,document.querySelector('#scene').getBoundingClientRect().width]);
   assert(widths[1]<=widths[0]+1&&widths[2]>300,`Mobile Space Him layout ${widths}`);
+  // Power/signal lines belong to Space Him only and must go when switching away.
+  for(const id of ['wess','nightshift','sunken']){await page.evaluate(id=>window.nineforestLayout.setSpace(id),id);assert.equal((await page.evaluate(()=>window.nineforestLayout.labels())).length,0,`no Space Him wiring in ${id}`);}
+  await page.evaluate(()=>window.nineforestLayout.setSpace('spacehim'));assert((await page.evaluate(()=>window.nineforestLayout.labels())).length>0,'wiring returns in Space Him');
   assert.deepEqual(errors,[]);
   console.log('PASS Space Him gear, projection, editing, cross-space JSON import and rendering');
  }finally{await browser.close();}

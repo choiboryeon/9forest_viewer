@@ -1,16 +1,16 @@
 {
-  "source_sha256": "4bf62797660564f484826e4f7b9d9f641b346c6f53011c7bd15eca5f9a25cefe",
-  "source_objects": 167,
-  "source_triangles": 9949,
-  "exported_meshes": 167,
-  "exported_triangles": 9949,
+  "source_sha256": "903aa2d2b5dde6236313f2743157031680adf32527d86c3e6244b0d959748f04",
+  "source_objects": 156,
+  "source_triangles": 8922,
+  "exported_meshes": 156,
+  "exported_triangles": 8922,
   "transform": "x=-OBJ.x, y=-OBJ.y, z=OBJ.z; 180-degree rotation; original winding retained; Blender coordinates restored",
   "exact_triangle_match": true,
   "material_conversion": "MTL Kd linear RGB -> sRGB hex",
   "coordinate_revision": 2,
   "unconfirmed_panels_hidden_by_default": 2,
-  "floor_regions": 16,
-  "obstacles": 6,
+  "floor_regions": 17,
+  "obstacles": 5,
   "ceiling_m": 2.64,
   "beam_soffit_m": 2.28
 }

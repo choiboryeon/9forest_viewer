@@ -13,7 +13,7 @@ function hull(m){
  const lo=[],hi=[];for(const p of a){while(lo.length>=2&&cross(lo.at(-2),lo.at(-1),p)<=0)lo.pop();lo.push(p);}
  for(const p of [...a].reverse()){while(hi.length>=2&&cross(hi.at(-2),hi.at(-1),p)<=0)hi.pop();hi.push(p);}return [...lo.slice(0,-1),...hi.slice(0,-1)];
 }
-const drawings=[`<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="850" viewBox="0 0 1060 850"><style>text{font-family:'Malgun Gothic',sans-serif;fill:#253b35} .dim{stroke:#677c72;fill:none;stroke-width:1} .small{font-size:13px}</style><rect width="1060" height="850" fill="#fafbf7"/><text x="55" y="45" font-size="24" font-weight="700">공간 힘 지하 · 검토 후 평면</text><text x="55" y="73" class="small">원본 도면 방향 / 단위 m / 천장·보·설비 생략 / 2026-10-21</text>`];
+const drawings=[`<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="850" viewBox="0 0 1060 850"><style>text{font-family:'Malgun Gothic',sans-serif;fill:#253b35} .dim{stroke:#677c72;fill:none;stroke-width:1} .small{font-size:13px}</style><rect width="1060" height="850" fill="#fafbf7"/><text x="55" y="45" font-size="24" font-weight="700">공간 힘 지하 · 검토 후 평면</text><text x="55" y="73" class="small">원본 도면 방향 / 단위 m / 천장·보·설비 생략 / 2026-10-21, 2026-11-16 가벽 추가</text>`];
 drawings.push(`<polygon points="${pts(notes.outer_inner_face_polygon_uv)}" fill="#e6e7df"/><polygon points="${pts(notes.gallery_floor_polygon_uv)}" fill="#d1d6d0"/>`);
 for(const m of room.meshes){
  if(m.group!=='wall'&&!/^Stair_tread/.test(m.name))continue;
@@ -23,7 +23,7 @@ for(const m of room.meshes){
  drawings.push(`<polygon points="${pts(poly)}" ${style}/>`);
 }
 const text=(x,y,s,size=15)=>{const p=pt([x,y]);drawings.push(`<text x="${p[0]}" y="${p[1]}" text-anchor="middle" font-size="${size}">${s}</text>`);};
-text(3.8,1.5,'상부 전시 구역');text(6.8,7.7,'주 전시 구역');text(11.7,3.15,'창고');text(10.9,4.18,'창고');text(7.3,2.85,'계단',12);text(4.2,4.5,'중앙 자유단 벽',12);
+text(3.8,1.5,'상부 전시 구역');text(6.8,7.7,'주 전시 구역');text(11.7,3.15,'창고');text(10.9,4.3,'옛 창고 · 전시 공간',12);text(7.3,2.85,'계단',12);text(4.2,4.5,'중앙 자유단 벽',12);text(4.75,6.2,'2026 가벽 1.96 m',11);
 text(.5,-.3,'도면 좌상단 (0,0)',12);
 function dimension(a,b,label,offset,vertical=false){
  const p=pt(a),q=pt(b);let p1,p2,t;

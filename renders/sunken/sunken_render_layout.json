@@ -1,0 +1,142 @@
+{
+  "title": "9FOREST · Sunken 공간 배치",
+  "version": 4,
+  "space_id": "sunken",
+  "room_m": {
+    "width": 16,
+    "depth": 13,
+    "height": 10.15
+  },
+  "ducts": [
+    {
+      "seed": 15,
+      "complexity": 3,
+      "type": "rigid",
+      "mode": "mixed",
+      "count": 2,
+      "diameter": 0.4,
+      "W": 12,
+      "D": 2.2,
+      "H": 4.5,
+      "supports": true,
+      "plinth": false,
+      "avoid": false,
+      "x": 2.4,
+      "y": -2.13,
+      "rotation": 30
+    }
+  ],
+  "random": {
+    "seed": 1,
+    "count": 6,
+    "source": "current"
+  },
+  "station": {
+    "enabled": true,
+    "x": 9.98,
+    "y": -7.02,
+    "rotation": 0
+  },
+  "items": [
+    {
+      "type": "R20",
+      "mode": "rod",
+      "x": 3.2843380346894264,
+      "y": -2.64575187349692,
+      "height": 1.16,
+      "rotation": 25,
+      "tiltX": -9,
+      "tiltY": -1
+    },
+    {
+      "type": "R13",
+      "mode": "rod",
+      "x": -1.5281098410487175,
+      "y": -2.641129359137267,
+      "height": 1.17,
+      "rotation": 190,
+      "tiltX": -10,
+      "tiltY": -1
+    },
+    {
+      "type": "R11",
+      "mode": "hang",
+      "x": 0.5737867765128613,
+      "y": -6.518643480492756,
+      "height": 2.07,
+      "rotation": 5,
+      "tiltX": 16,
+      "tiltY": 9
+    },
+    {
+      "type": "R04",
+      "mode": "rod",
+      "x": 8.778947450220585,
+      "y": -4.574473078838219,
+      "height": 1.23,
+      "rotation": 45,
+      "tiltX": 13,
+      "tiltY": 2
+    },
+    {
+      "type": "R19",
+      "mode": "hang",
+      "x": 7.618458100896978,
+      "y": -6.493417595047504,
+      "height": 2.45,
+      "rotation": 135,
+      "tiltX": 24,
+      "tiltY": 27
+    },
+    {
+      "type": "R10",
+      "mode": "rod",
+      "x": 11.532840927058844,
+      "y": -4.595894220492142,
+      "height": 1.04,
+      "rotation": 70,
+      "tiltX": 11,
+      "tiltY": 14
+    },
+    {
+      "type": "R14",
+      "mode": "hang",
+      "x": 2.6111516021192074,
+      "y": -5.7602354334667325,
+      "height": 2.63,
+      "rotation": 135,
+      "tiltX": -10,
+      "tiltY": 17
+    },
+    {
+      "type": "R06",
+      "mode": "hang",
+      "x": -1.9646260477602482,
+      "y": -5.559450896224007,
+      "height": 2.67,
+      "rotation": 95,
+      "tiltX": 10,
+      "tiltY": 22
+    },
+    {
+      "type": "R05",
+      "mode": "hang",
+      "x": -0.1840927079319954,
+      "y": 0.9252468147793796,
+      "height": 2.38,
+      "rotation": 150,
+      "tiltX": -31,
+      "tiltY": 14
+    },
+    {
+      "type": "R08",
+      "mode": "rod",
+      "x": 6.83543911203742,
+      "y": 3.384208711097017,
+      "height": 1.32,
+      "rotation": 60,
+      "tiltX": -19,
+      "tiltY": 18
+    }
+  ]
+}

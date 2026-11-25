@@ -1,0 +1,16 @@
+[
+ {
+  "id": "T1",
+  "title": "책상 40 × 40",
+  "furniture": true,
+  "dimensions_m": {"width": 0.4, "depth": 0.4, "height": 0.5},
+  "note": "가로 400 × 세로 400 × 높이 500 mm 소형 책상. 바닥에 놓고 수평 방향만 돌릴 수 있습니다."
+ },
+ {
+  "id": "T2",
+  "title": "책상 183 × 76",
+  "furniture": true,
+  "dimensions_m": {"width": 1.83, "depth": 0.76, "height": 0.74},
+  "note": "가로 1830 × 세로 760 × 높이 740 mm 책상. 바닥에 놓고 수평 방향만 돌릴 수 있습니다."
+ }
+]

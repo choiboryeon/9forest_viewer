@@ -52,6 +52,10 @@ const meshes=objects.filter(p=>p.faces.length).map(p=>{
    m.internalWall=true;
   }else m.internalWall=true;
  }
+ // The wall line behind the audience (central partition, stair front, service
+ // notch, storage front, exit sign) blocks views of the gallery from the north:
+ // cut it away in 3D whenever the camera is north of its gallery face (y -4.95).
+ if(/^Partition_Central_free_end$|^Stair_entry_lintel$|^Stair_front_(860|closure)$|^Stair_door_frame|^Service_notch_|^Storage_south_front$|^Exit_(sign|arrow)$/.test(p.name))m.cutaway={point:[7,-4.95],normal:[0,1]};
  return m;
 });
 // Rectangular interior bands follow the plan's gallery polygon. The diagonal
@@ -62,6 +66,8 @@ const floorRegions=[
  {id:'main-gallery',bounds:[.18,4.86,12.27,10.57],z:0},
  {id:'main-east',bounds:[12.27,4.86,13.77,9.01],z:0},
  {id:'entry-link',bounds:[6.05,4.69,7.81,5.18],z:0},
+ // Former lower storage room, opened to the gallery in the 2026 revision.
+ {id:'north-east-bay',bounds:[8.22,3.77,14.34,4.87],z:0},
 ];
 for(let i=0;i<12;i++){
  const y0=9.01+i*1.56/12,y1=9.01+(i+1)*1.56/12;
@@ -69,14 +75,14 @@ for(let i=0;i<12;i++){
  if(x1>12.27)floorRegions.push({id:`diagonal-${i}`,bounds:[12.27,y0,x1,y1],z:0});
 }
 for(const region of floorRegions){const [x0,v0,x1,v1]=region.bounds;region.bounds=[x0,-v1,x1,-v0];}
-const obstacleNames=/^Partition_Central|^Plan_panel_|^Stair_West|^Stair_North_return|^Service_notch_/;
+const obstacleNames=/^Partition_(Central|Entry_return)|^Plan_panel_|^Stair_West|^Stair_North_return|^Service_notch_|^Storage_West_return$/;
 const obstacles=meshes.filter(m=>obstacleNames.test(m.name)&&!m.unconfirmed).map(m=>({id:m.name,kind:'wall',bounds:[m.bounds.min[0],m.bounds.min[1],m.bounds.max[0],m.bounds.max[1]],minZ:0,maxZ:2.64}));
 const room={
  metadata:{id:'spacehim',title:'공간 힘 · 지하',unit:'m',up_axis:'Z',width_m:14.46,depth_m:10.75,
   coordinate_revision:2,coordinates:'Blender X=u, Y=-v, Z=up; drawing top-left (0,0)',
   bounds:{min:[0,-10.75],max:[14.46,0]},model_bounds:boundsOf(points.flat()),height_m:2.64,ridge_m:2.64,eave_m:2.64,ridge_y_m:-5.375,ceiling_m:2.64,roof_type:'flat',
   area_m2:notes.gallery_gross_floor_m2,area_basis:'도면과 사진을 바탕으로 재구성한 갤러리 면적',floorRegions,obstacles,entrance:[7.2,-5.35],door:{wall:'C',x_m:7.05,width_m:.91,height_m:2.07},
-  projectionWalls:[{id:'south',label:'도면 하단 긴 벽',a:[.2,-10.65],b:[12.28,-10.65],height:2.28},{id:'west',label:'도면 좌측 벽',a:[.2,-5.08],b:[.2,-10.65],height:2.28}],
+  projectionWalls:[{id:'south',label:'도면 하단 긴 벽',a:[.2,-10.65],b:[12.28,-10.65],height:2.28},{id:'west',label:'도면 좌측 벽',a:[.2,-5.08],b:[.2,-10.65],height:2.28},{id:'east',label:'도면 우측 벽 (B면)',a:[13.85,-4.96],b:[13.85,-9],height:2.28}],
   source_file:'Space_Him_Basement.obj',source_sha256:crypto.createHash('sha256').update(obj).digest('hex'),
   assumptions:['도면과 현장 사진에 따른 공간 재구성이며 실측 및 시공 도면이 아닙니다.','7800 표기와 그림 비례가 충돌해 중앙 가벽의 정확한 위치는 현장 확인이 필요합니다.','천고 2.64 m 및 보 하부 2.28 m는 원본 모델의 가정입니다.','투사 화면은 0.3:1 투사비와 16:9 화면을 이용한 기하학적 예측입니다. 실제 기기 렌즈 오프셋과 장애물은 현장에서 확인해야 합니다.']},
  cameras:{'3d':{position:[17,-15,13],target:[7,-5.5,1]},A:{position:[6.8,-6.2,1.65],target:[6.8,-10.65,1.4]},B:{position:[6,-7.5,1.65],target:[13.7,-7.5,1.4]},C:{position:[4,-8.7,1.65],target:[4,-.2,1.4]},D:{position:[10,-7.5,1.65],target:[.2,-7.5,1.4]}},

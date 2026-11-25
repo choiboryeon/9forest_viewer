@@ -63,6 +63,8 @@ export class ProjectorLighting{
   const geometry=new THREE.BufferGeometry().setFromPoints(points);geometry.setAttribute('uv',new THREE.Float32BufferAttribute([0,0,1,0,1,1,0,1],2));geometry.setIndex([0,1,2,0,2,3]);
   const material=new THREE.MeshBasicMaterial({map:r.texture,color:0xffffff,side:THREE.DoubleSide,transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,toneMapped:false});
   r.screen=new THREE.Mesh(geometry,material);r.screen.raycast=()=>{};r.screen.renderOrder=2;r.group.add(r.screen);
+  // Depth only: floor labels behind the image do not show through it.
+  const mask=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({side:THREE.DoubleSide,colorWrite:false}));mask.raycast=()=>{};mask.castShadow=false;mask.renderOrder=3;mask.material.transparent=true;mask.userData.viewerOnly=true;r.group.add(mask);
   const guides=new THREE.Group(),color=p.valid?0x7ebed1:0xde925e;
   guides.add(new THREE.LineSegments(new THREE.EdgesGeometry(geometry),new THREE.LineBasicMaterial({color,transparent:true,opacity:.65,toneMapped:false})));
   const angle=r.item.rotation*Math.PI/180,lens=new THREE.Vector3(r.item.x-Math.sin(angle)*.16,r.item.y+Math.cos(angle)*.16,floorZ+.092);

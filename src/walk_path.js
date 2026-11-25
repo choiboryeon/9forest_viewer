@@ -84,7 +84,7 @@ export function planWalk({width, depth, door, objects = [], metadata}) {
   const entrance = metadata?.entrance || [Math.max(margin, Math.min(width - margin, entranceX)), Math.max(margin, Math.min(depth - margin, depth - .34))];
   const entranceNode = nearest(entrance);
   if (entranceNode < 0) return {start: null, eye, segments: [], visits: 0, skipped: objects.length, skippedIds: objects.map(o => o.id), total: 0, noWalk: true};
-  const start = at(entranceNode), remaining = [...objects], segments = [], skippedIds = [];
+  const start = at(entranceNode), remaining = objects.filter(o => o.visit !== false), segments = [], skippedIds = [];
   let current = start, visits = 0;
   while (remaining.length) {
     remaining.sort((a, b) => Math.hypot(a.x - current[0], a.y - current[1]) - Math.hypot(b.x - current[0], b.y - current[1]));

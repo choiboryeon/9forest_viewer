@@ -86,6 +86,8 @@ function meshFrom(object,triangles,category){
   const m={name:object.name+(category?'__'+category:''),group,sourceObject:object.name,vertices,faces,...materials.get(object.material),bounds};
   if(wall&&wall!=='internal')m.wall=wall;
   else if(group==='wall'||group==='opening')m.internalWall=true;
+  // The column is painted white like the walls on site; the source MTL gives it grey.
+  if(object.name.startsWith('Column_')){const w=[...materials.entries()].find(([k])=>/wall/i.test(k));if(w)m.color=w[1].color;m.painted=true;}
   if(object.material==='Frame_Aluminum'){m.metalness=.55;m.roughness=.35;}
   if(object.material==='Glass_Clear'){m.glass=true;m.roughness=.1;}
   meshes.push(m);

@@ -10,7 +10,7 @@ const mean=rgb=>rgb.reduce((a,b)=>a+b)/3;
  const page=await browser.newPage({viewport:{width:1600,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
  try{
   await page.goto((process.env.VIEWER_URL||'http://127.0.0.1:4186/9forest_viewer.html')+'?space=spacehim');await ready(page);
-  await page.evaluate(()=>{const d=window.nineforestLayout.exportLayout();d.items.forEach(i=>{if(i.projection)i.projection.enabled=false;});d.lighting.showBeams=false;window.nineforestLayout.importLayout(d);});await ready(page);await page.locator('#lighting-open').click();
+  await page.evaluate(()=>{const d=window.nineforestLayout.exportLayout();d.items=d.items.filter(i=>['K8','MIXER','PROJECTOR'].includes(i.type));d.lighting={...window.nineforestLayout.evenLighting(),showBeams:false};d.items.forEach(i=>{if(i.projection)i.projection.enabled=false;});d.lighting.showBeams=false;window.nineforestLayout.importLayout(d);});await ready(page);await page.locator('#lighting-open').click();
   const wall=[5.2,-4.956,1.2],on=await pixel(page,wall);
   await page.screenshot({path:path.resolve(__dirname,'../test-results/browser/track-indirect-on.png')});
   await page.locator('#lighting-indirect').uncheck();const off=await pixel(page,wall);assert(mean(on)>mean(off)+8,`A wall outside the direct beam receives reflected light: ${on} / ${off}`);
